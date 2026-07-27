@@ -17,4 +17,11 @@ export function registerCommands(bot: Bot): void {
       { parse_mode: "HTML" },
     );
   });
+
+  // bot.command() only wires up the handler - it doesn't tell Telegram the
+  // command exists, which is a separate API call. Without this, /id works
+  // when typed but never shows up in the "/" menu.
+  bot.api
+    .setMyCommands([{ command: "id", description: "Mostra o ID deste chat (uso restrito ao dono do bot)" }])
+    .catch((error) => console.error("Failed to register bot commands:", error));
 }
