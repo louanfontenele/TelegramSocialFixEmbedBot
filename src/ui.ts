@@ -39,9 +39,14 @@ export function buildMessageText(sender: Sender, link: ResolvedLink): string {
 }
 
 export function buildKeyboard(id: string, link: ResolvedLink): InlineKeyboard {
-  return new InlineKeyboard()
-    .url(`${link.platformEmoji} Original`, link.originalUrl)
-    .row()
-    .text("🔄 Atualizar", `refresh:${id}`)
-    .text("🗑️ Excluir", `delete:${id}`);
+  // The original link is always offered; the action buttons are opt-out.
+  const keyboard = new InlineKeyboard().url(`${link.platformEmoji} Original`, link.originalUrl);
+
+  if (config.buttons.refresh || config.buttons.delete) {
+    keyboard.row();
+    if (config.buttons.refresh) keyboard.text("🔄 Atualizar", `refresh:${id}`);
+    if (config.buttons.delete) keyboard.text("🗑️ Excluir", `delete:${id}`);
+  }
+
+  return keyboard;
 }

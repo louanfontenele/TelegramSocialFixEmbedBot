@@ -7,6 +7,7 @@ import { buildKeyboard, buildMessageText } from "../ui.js";
 const NOT_AUTHORIZED = "Só quem enviou o link ou admins do grupo podem fazer isso.";
 const CANNOT_DELETE = "Você precisa da permissão de apagar mensagens para excluir isso.";
 const EXPIRED = "Essa ação expirou (a mensagem é antiga demais).";
+const DISABLED = "Esse botão foi desativado.";
 
 /** What a clicking user is allowed to do with a given bot message. */
 interface Rights {
@@ -52,6 +53,13 @@ async function refreshLink(link: ResolvedLink): Promise<ResolvedLink> {
 
 export function registerCallbackHandlers(bot: Bot): void {
   bot.callbackQuery(/^refresh:(.+)$/, async (ctx) => {
+    // Messages sent before the button was turned off still show it, so the
+    // action has to be refused here too, not just hidden from the keyboard.
+    if (!config.buttons.refresh) {
+      await ctx.answerCallbackQuery({ text: DISABLED });
+      return;
+    }
+
     const id = ctx.match[1];
     const entry = getMessage(id);
     // The chat check keeps the rights lookup and the acted-on message in the
@@ -91,6 +99,11 @@ export function registerCallbackHandlers(bot: Bot): void {
   });
 
   bot.callbackQuery(/^delete:(.+)$/, async (ctx) => {
+    if (!config.buttons.delete) {
+      await ctx.answerCallbackQuery({ text: DISABLED });
+      return;
+    }
+
     const id = ctx.match[1];
     const entry = getMessage(id);
     // The chat check keeps the rights lookup and the acted-on message in the

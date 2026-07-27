@@ -11,6 +11,21 @@ function optional(name: string, fallback: string): string {
   return value && value.length > 0 ? value : fallback;
 }
 
+const TRUE_VALUES = ["true", "1", "yes", "on"];
+const FALSE_VALUES = ["false", "0", "no", "off"];
+
+/**
+ * Accepts the spellings people actually write in a .env file, and rejects
+ * anything else rather than quietly treating it as false - a mistyped flag
+ * that silently disables a feature is hard to notice.
+ */
+function boolean(name: string, fallback: boolean): boolean {
+  const raw = optional(name, String(fallback)).trim().toLowerCase();
+  if (TRUE_VALUES.includes(raw)) return true;
+  if (FALSE_VALUES.includes(raw)) return false;
+  throw new Error(`Invalid ${name}="${raw}". Expected true or false.`);
+}
+
 /**
  * Fails fast on a non-numeric value: silently falling back to NaN makes the
  * bot misbehave in ways that are hard to trace back to a typo in .env.
@@ -86,12 +101,17 @@ export const config = {
     youtube: optional("YOUTUBE_FIX_DOMAIN", "koutube.com"),
   },
   stateTtlMs: positiveNumber("STATE_TTL_MINUTES", "1440") * 60 * 1000,
+  // The "Original" button is always present; these two are optional.
+  buttons: {
+    refresh: boolean("SHOW_REFRESH_BUTTON", true),
+    delete: boolean("SHOW_DELETE_BUTTON", true),
+  },
   access: {
-    restrict: optional("RESTRICT_ACCESS", "false") === "true",
+    restrict: boolean("RESTRICT_ACCESS", false),
     allowedChatIds: idList("ALLOWED_CHAT_IDS"),
     ownerId: optionalId("OWNER_USER_ID"),
     // When restricted, leave any group the bot is added to that isn't allowlisted.
-    autoLeave: optional("AUTO_LEAVE_UNAUTHORIZED", "true") === "true",
+    autoLeave: boolean("AUTO_LEAVE_UNAUTHORIZED", true),
   },
   batching: {
     // Links are replied to in batches, pausing between them so a message
