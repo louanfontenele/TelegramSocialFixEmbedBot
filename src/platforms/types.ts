@@ -1,6 +1,7 @@
 export interface Platform {
   id: string;
   label: string;
+  emoji: string;
   matches(url: URL): boolean;
   /** Returns the fixed URL, or null if nothing useful could be done with it. */
   resolve(url: URL): Promise<string | null>;

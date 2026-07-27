@@ -23,7 +23,12 @@ async function resolveLinks(text: string): Promise<ResolvedLink[]> {
     const fixedUrl = await platform.resolve(url);
     if (!fixedUrl || fixedUrl === rawUrl) continue;
 
-    results.push({ platformLabel: platform.label, originalUrl: rawUrl, fixedUrl });
+    results.push({
+      platformLabel: platform.label,
+      platformEmoji: platform.emoji,
+      originalUrl: rawUrl,
+      fixedUrl,
+    });
   }
 
   return results;

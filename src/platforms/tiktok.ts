@@ -6,6 +6,7 @@ import { resolveFinalUrl, type Platform } from "./types.js";
 export const tiktok: Platform = {
   id: "tiktok",
   label: "TikTok",
+  emoji: "🎵",
 
   matches(url) {
     const host = url.hostname.replace(/^www\./, "");

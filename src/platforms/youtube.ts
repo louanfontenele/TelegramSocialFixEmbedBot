@@ -9,6 +9,7 @@ const TRACKING_PARAMS = ["si", "feature", "pp", "ab_channel"];
 export const youtube: Platform = {
   id: "youtube",
   label: "YouTube",
+  emoji: "▶️",
 
   matches(url) {
     const host = url.hostname.replace(/^www\./, "").replace(/^m\./, "");

@@ -3,6 +3,7 @@ import { config } from "./config.js";
 
 export interface ResolvedLink {
   platformLabel: string;
+  platformEmoji: string;
   originalUrl: string;
   fixedUrl: string;
 }

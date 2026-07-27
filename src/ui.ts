@@ -6,16 +6,24 @@ function escapeHtml(text: string): string {
 }
 
 export function buildMessageText(senderName: string, links: ResolvedLink[]): string {
-  const header = `🔗 Enviado por <b>${escapeHtml(senderName)}</b>`;
-  const body = links.map((link) => link.fixedUrl).join("\n");
-  return `${header}\n${body}`;
+  const header = `👤 <b>${escapeHtml(senderName)}</b> enviou:`;
+
+  const body =
+    links.length === 1
+      ? `${links[0].platformEmoji} ${links[0].fixedUrl}`
+      : links
+          .map((link) => `${link.platformEmoji} <b>${escapeHtml(link.platformLabel)}</b>\n${link.fixedUrl}`)
+          .join("\n\n");
+
+  return `${header}\n\n${body}`;
 }
 
 export function buildKeyboard(id: string, links: ResolvedLink[]): InlineKeyboard {
   const keyboard = new InlineKeyboard();
 
   for (const link of links) {
-    keyboard.url(`🔗 Original (${link.platformLabel})`, link.originalUrl).row();
+    const label = links.length === 1 ? "Original" : `Original (${link.platformLabel})`;
+    keyboard.url(`${link.platformEmoji} ${label}`, link.originalUrl).row();
   }
 
   keyboard.text("🔄 Atualizar", `refresh:${id}`).text("🗑️ Excluir", `delete:${id}`);

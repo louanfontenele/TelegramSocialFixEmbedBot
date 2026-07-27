@@ -5,6 +5,7 @@ import type { Platform } from "./types.js";
 export const twitter: Platform = {
   id: "twitter",
   label: "X / Twitter",
+  emoji: "🐦",
 
   matches(url) {
     const host = url.hostname.replace(/^www\./, "");

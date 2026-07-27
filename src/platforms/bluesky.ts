@@ -5,6 +5,7 @@ import type { Platform } from "./types.js";
 export const bluesky: Platform = {
   id: "bluesky",
   label: "Bluesky",
+  emoji: "🦋",
 
   matches(url) {
     const host = url.hostname.replace(/^www\./, "");

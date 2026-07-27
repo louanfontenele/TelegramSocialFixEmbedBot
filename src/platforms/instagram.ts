@@ -7,6 +7,7 @@ import type { Platform } from "./types.js";
 export const instagram: Platform = {
   id: "instagram",
   label: "Instagram",
+  emoji: "📸",
 
   matches(url) {
     const host = url.hostname.replace(/^www\./, "");

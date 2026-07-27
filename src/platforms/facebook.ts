@@ -9,6 +9,7 @@ const ESSENTIAL_PARAMS = ["v", "id", "story_fbid", "set", "post_id", "fbid", "vi
 export const facebook: Platform = {
   id: "facebook",
   label: "Facebook",
+  emoji: "📘",
 
   matches(url) {
     const host = url.hostname.replace(/^www\./, "");
