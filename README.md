@@ -59,14 +59,6 @@ an improved one.
 
 ### Considered but not implemented
 
-**Pinterest** only has [EmbedEZ](https://embedez.com) as a fixer, and
-EmbedEZ works nothing like the others here: it's a two-step API (search →
-preview, needs an API key) that returns structured data for the caller to
-render itself, rather than a page with Open Graph tags for Telegram to
-fetch. Supporting it would mean sending photos/videos directly through
-Telegram's API instead of relying on link previews - a different feature,
-not another entry in this table.
-
 **Kwai/Kuaishou** was tried and dropped: no third-party fixer exists for
 it anywhere in the embed-fixer ecosystem. Its own pages do serve
 `og:title`/`og:description`/`og:image`, so Telegram already shows a
