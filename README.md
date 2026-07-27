@@ -13,7 +13,12 @@ Supported platforms:
 | TikTok    | Follows redirects, then rewrites to [tfxktok.com](https://tfxktok.com/) |
 | YouTube   | Strips tracking params, rewrites to [koutube](https://github.com/iGerman00/koutube) |
 | Reddit    | Probes a list of [fxreddit](https://github.com/MinnDevelopment/fxreddit) backends (rxddit.com and friends) and uses the first that serves an embed |
-| Facebook  | Follows redirects and strips tracking params (no third-party embed fixer available) |
+| Threads   | Probes [vxThreads](https://github.com/everettsouthwick/vxThreads)/[FixThreads](https://github.com/milanmdev/fixthreads) and uses the first that serves an embed |
+| Twitch (clips) | Rewrites `clips.twitch.tv` links to [fxtwitch](https://github.com/seriaati/fxtwitch) |
+| Tumblr    | Rewrites post links to [fxtumblr](https://github.com/knuxify/fxtumblr) |
+| Pixiv     | Rewrites artwork links to [Phixiv](https://github.com/thelaao/phixiv) |
+| DeviantArt | Rewrites deviation links to [fixdeviantart](https://github.com/Tschrock/fixdeviantart) |
+| Facebook  | Follows redirects and strips tracking params; Reels/Watch additionally try [facebed](https://github.com/4pii4/facebed) |
 
 ### Link forms recognized
 
@@ -25,22 +30,58 @@ Supported platforms:
 | TikTok    | Any `*.tiktok.com`, covering `vm.`, `vt.`, `m.` and `/t/` shortlinks, resolved to the canonical video |
 | YouTube   | `youtube.com`, `youtu.be`, `youtube-nocookie.com` (+ `www`/`m`/`music`) on `/watch?v=`, `/shorts/`, `/live/`, `/embed/`. Channels, search and the home page are ignored |
 | Reddit    | Any `*.reddit.com` (`old`, `new`, `np`, `amp`, `m`) on `/r/…/comments/…`, `/r/…/s/…`, `/u/…`, `/user/…` or `/comments/…`; `redd.it` shortlinks. Direct media hosts (`i.redd.it`, `v.redd.it`) are left alone since Telegram embeds those already |
+| Threads   | `threads.net`/`threads.com` on `/@user/post/…` |
+| Twitch    | `clips.twitch.tv/<slug>` only - channel and VOD pages aren't touched |
+| Tumblr    | `tumblr.com/<blog>/<id>` or `<blog>.tumblr.com/<id>`, either form |
+| Pixiv     | `pixiv.net` on `/artworks/…` (with or without a locale prefix like `/en/`) or the legacy `member_illust.php?illust_id=` form |
+| DeviantArt | `deviantart.com` on `/<user>/art/…`; the legacy `/view/<id>` form is expanded to the canonical path first |
 | Facebook  | Any `*.facebook.com` (`m`, `web`, `mbasic`, …), `fb.watch`, `fb.me` |
 
 All of the above use public hosted instances of these projects by default —
 no self-hosting required. Domains are configurable via environment
 variables (see `.env.example`) in case a public instance goes down.
 
-Instagram and Reddit are the exceptions: their fixers get blocked and
-replaced often (the long-standing `ddinstagram.com` stopped responding once
-InstaFix was archived in April 2026), so `INSTAGRAM_FIX_DOMAINS` and
-`REDDIT_FIX_DOMAINS` take a *list*. The preferred backend is probed against
-the actual post being shared; if it doesn't serve Open Graph tags the rest
-are raced concurrently, and the winner is remembered for 10 minutes.
+Instagram, Reddit, Threads, Twitch, Tumblr, Pixiv, DeviantArt and the
+Facebook Reel fixer all take a *list* rather than a single domain: this
+category of fixer gets blocked and replaced often (the long-standing
+`ddinstagram.com` stopped responding once InstaFix was archived in April
+2026). The preferred backend is probed against the actual post being
+shared; if it doesn't serve Open Graph tags the rest are raced
+concurrently, and the winner is remembered for 10 minutes.
+
+Native DeviantArt and Pixiv links often already carry working
+`og:title`/`og:image` on their own for plain single-image content - these
+fixers earn their keep on galleries, mature-content gates, and animated
+(ugoira) works, which weren't tested here. Twitch is the opposite case:
+its own `og:video` points at an `<iframe>` (`text/html`), which Telegram
+can't play inline, so a fixer is required for any embed at all, not just
+an improved one.
+
+### Considered but not implemented
+
+**Pinterest** only has [EmbedEZ](https://embedez.com) as a fixer, and
+EmbedEZ works nothing like the others here: it's a two-step API (search →
+preview, needs an API key) that returns structured data for the caller to
+render itself, rather than a page with Open Graph tags for Telegram to
+fetch. Supporting it would mean sending photos/videos directly through
+Telegram's API instead of relying on link previews - a different feature,
+not another entry in this table.
+
+**Kwai/Kuaishou** was tried and dropped: no third-party fixer exists for
+it anywhere in the embed-fixer ecosystem. Its own pages do serve
+`og:title`/`og:description`/`og:image`, so Telegram already shows a
+title-and-thumbnail card; the actual video is only reachable from a script
+blob, not an `og:video` tag, and nothing can make it play inline without
+someone building and hosting a proxy for it.
+
+**Bilibili, PTT** were left out as Chinese/Taiwanese-language platforms
+with limited relevance to this bot's audience. **FurAffinity, Iwara** were
+left out as adult-content-oriented communities.
 
 ## Security notes
 
-- Redirects for TikTok and Facebook links are followed one hop at a time
+- Redirects for TikTok, Facebook, X (`t.co`), Instagram (`/share/`) and
+  DeviantArt (`/view/`) links are followed one hop at a time
   and each hop is validated: private, loopback and link-local addresses are
   refused, and the chain may not leave the platform's own domains. Without
   this, Facebook's `/l.php?u=` open redirect would let a posted link steer
@@ -173,8 +214,9 @@ src/
     message.ts            # detects links, replies with the fix
     callbacks.ts           # handles refresh/delete button clicks
   platforms/
-    twitter.ts, bluesky.ts, instagram.ts, tiktok.ts,
-    youtube.ts, reddit.ts, facebook.ts
+    twitter.ts, bluesky.ts, instagram.ts, tiktok.ts, youtube.ts,
+    reddit.ts, threads.ts, twitch.ts, tumblr.ts, pixiv.ts,
+    deviantart.ts, facebook.ts
     types.ts                # Platform interface, host helpers, SSRF-safe fetch
     failover.ts             # picks a live embed backend from a list
     index.ts                # platform registry

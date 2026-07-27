@@ -1,10 +1,12 @@
+import { config } from "../config.js";
+import { pickLiveDomain } from "./failover.js";
 import { canonicalize, isHostWithin, resolveFinalUrl, type Platform } from "./types.js";
 
-// Facebook doesn't have a workable third-party embed fixer, so this only
-// resolves shortened fb.watch links and strips tracking params, keeping
-// only the parameters actually needed to identify the content (ported
-// from the original bot's logic).
 const ESSENTIAL_PARAMS = ["v", "id", "story_fbid", "set", "post_id", "fbid", "view_single"];
+
+// Reels/Watch are the content Facebook's own OG tags most often fail to
+// serve to bots; regular posts and photos usually already unfurl fine.
+const REEL_OR_WATCH_PATH = /^\/(?:[a-z]{2}\/)?(?:reel|watch)\//;
 
 export const facebook: Platform = {
   id: "facebook",
@@ -33,6 +35,18 @@ export const facebook: Platform = {
       fixed.hash = "";
       const bare = fixed.toString().replace(/\/$/, "");
       return { original: original.toString(), fixed: bare };
+    }
+
+    if (REEL_OR_WATCH_PATH.test(original.pathname) && config.domains.facebookReel.length > 0) {
+      const domain = await pickLiveDomain("facebook-reel", config.domains.facebookReel, original.pathname);
+      if (domain) {
+        const fixed = new URL(original.toString());
+        fixed.hostname = domain;
+        fixed.hash = "";
+        return { original: original.toString(), fixed: fixed.toString() };
+      }
+      // No third-party backend served this reel either - fall through to
+      // the tracking-cleaned Facebook link below rather than giving up.
     }
 
     const fixed = new URL(original.toString());

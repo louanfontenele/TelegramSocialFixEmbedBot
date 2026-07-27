@@ -112,6 +112,21 @@ export const config = {
     reddit: domainList("REDDIT_FIX_DOMAINS", "rxddit.com,vxreddit.com,redditfix.com"),
     // Empty string disables domain rewriting for YouTube.
     youtube: optional("YOUTUBE_FIX_DOMAIN", "koutube.com"),
+    // vxThreads and FixThreads are separate projects; either can be down
+    // independently of the other.
+    threads: domainList("THREADS_FIX_DOMAINS", "vxthreads.net,fixthreads.net"),
+    // fxfb.seria.moe's own maintainer calls it unreliable and recommends
+    // facebed; kept as a second attempt rather than dropped, since a probe
+    // that fails just costs one extra request. Empty disables reel/watch
+    // fixing entirely, falling back to the tracking-cleaned Facebook link.
+    facebookReel: domainList("FACEBOOK_REEL_FIX_DOMAINS", "facebed.com,fxfb.seria.moe"),
+    twitch: domainList("TWITCH_FIX_DOMAINS", "fxtwitch.seria.moe"),
+    // fx.dissonant.dev has gone dark; kept as a second attempt in case it
+    // comes back, since a failed probe just costs one extra request.
+    tumblr: domainList("TUMBLR_FIX_DOMAINS", "tpmblr.com,fx.dissonant.dev"),
+    // Phixiv publishes two equivalent domains.
+    pixiv: domainList("PIXIV_FIX_DOMAINS", "phixiv.net,ppxiv.net"),
+    deviantart: domainList("DEVIANTART_FIX_DOMAINS", "fixdeviantart.com"),
   },
   stateTtlMs: positiveNumber("STATE_TTL_MINUTES", "1440") * 60 * 1000,
   // fxtwitter/fixupx and fxbsky are both FxEmbed under the hood and support
