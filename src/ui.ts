@@ -40,7 +40,12 @@ export function buildMessageText(sender: Sender, link: ResolvedLink): string {
 
 export function buildKeyboard(id: string, link: ResolvedLink): InlineKeyboard {
   // The original link is always offered; the action buttons are opt-out.
-  const keyboard = new InlineKeyboard().url(`${link.platformEmoji} Original`, link.originalUrl);
+  // The label spells out what the button does - "Original" alone left people
+  // guessing what it pointed at.
+  const keyboard = new InlineKeyboard().url(
+    `${link.platformEmoji} Link Original (${link.platformLabel})`,
+    link.originalUrl,
+  );
 
   if (config.buttons.refresh || config.buttons.delete) {
     keyboard.row();
