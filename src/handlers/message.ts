@@ -72,7 +72,7 @@ function sleep(ms: number): Promise<void> {
 const GROUP_CHAT_TYPES = ["group", "supergroup"];
 
 export function registerMessageHandler(bot: Bot): void {
-  bot.on("message:text", async (ctx) => {
+  bot.on("message", async (ctx) => {
     if (!GROUP_CHAT_TYPES.includes(ctx.chat.type)) return;
 
     // Without a real user there's nobody to credit or to authorize the
@@ -80,13 +80,19 @@ export function registerMessageHandler(bot: Bot): void {
     // attributed to a placeholder id.
     if (!ctx.from || ctx.from.is_bot) return;
 
+    // A link posted as the caption of a photo/video/document arrives in
+    // .caption, not .text - filtering on "message:text" alone silently
+    // ignored every attachment with a link in its caption.
+    const text = ctx.message.text ?? ctx.message.caption;
+    if (!text) return;
+
     const sender: Sender = { id: ctx.from.id, name: ctx.from.first_name };
     if (!isAllowed(ctx.chat.id, sender.id)) {
       console.log(`Ignored message from disallowed chat ${ctx.chat.id} (user ${sender.id})`);
       return;
     }
 
-    const links = await resolveLinks(ctx.message.text);
+    const links = await resolveLinks(text);
     if (links.length === 0) return;
 
     // Telegram only renders one link preview per message, so each fixed link
