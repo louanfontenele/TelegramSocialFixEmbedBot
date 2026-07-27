@@ -1,19 +1,41 @@
 import type { Bot } from "grammy";
+import { config } from "../config.js";
 import { findPlatform } from "../platforms/index.js";
 import { deleteMessage, getMessage, updateMessage, type ResolvedLink } from "../store.js";
 import { buildKeyboard, buildMessageText } from "../ui.js";
 
 const NOT_AUTHORIZED = "Só quem enviou o link ou admins do grupo podem fazer isso.";
+const CANNOT_DELETE = "Você precisa da permissão de apagar mensagens para excluir isso.";
 const EXPIRED = "Essa ação expirou (a mensagem é antiga demais).";
 
-async function isAuthorized(bot: Bot, chatId: number, userId: number, senderId: number): Promise<boolean> {
-  if (userId === senderId) return true;
+/** What a clicking user is allowed to do with a given bot message. */
+interface Rights {
+  refresh: boolean;
+  delete: boolean;
+}
+
+const NO_RIGHTS: Rights = { refresh: false, delete: false };
+const ALL_RIGHTS: Rights = { refresh: true, delete: true };
+
+/**
+ * Telegram renders one keyboard for the whole chat, so the buttons are
+ * visible to everyone - authorization has to happen on click instead.
+ *
+ * Refreshing only re-edits the bot's own message, so any admin may do it.
+ * Deleting is gated on the group's own can_delete_messages right, so an
+ * admin who isn't trusted to remove messages can't remove these either.
+ */
+async function rightsOf(bot: Bot, chatId: number, userId: number, senderId: number): Promise<Rights> {
+  if (userId === senderId) return ALL_RIGHTS;
+  if (config.access.ownerId !== undefined && userId === config.access.ownerId) return ALL_RIGHTS;
 
   try {
     const member = await bot.api.getChatMember(chatId, userId);
-    return member.status === "creator" || member.status === "administrator";
+    if (member.status === "creator") return ALL_RIGHTS;
+    if (member.status !== "administrator") return NO_RIGHTS;
+    return { refresh: true, delete: member.can_delete_messages === true };
   } catch {
-    return false;
+    return NO_RIGHTS;
   }
 }
 
@@ -37,7 +59,8 @@ export function registerCallbackHandlers(bot: Bot): void {
       return;
     }
 
-    if (!(await isAuthorized(bot, entry.chatId, ctx.from.id, entry.senderId))) {
+    const rights = await rightsOf(bot, entry.chatId, ctx.from.id, entry.senderId);
+    if (!rights.refresh) {
       await ctx.answerCallbackQuery({ text: NOT_AUTHORIZED, show_alert: true });
       return;
     }
@@ -62,8 +85,13 @@ export function registerCallbackHandlers(bot: Bot): void {
       return;
     }
 
-    if (!(await isAuthorized(bot, entry.chatId, ctx.from.id, entry.senderId))) {
-      await ctx.answerCallbackQuery({ text: NOT_AUTHORIZED, show_alert: true });
+    const rights = await rightsOf(bot, entry.chatId, ctx.from.id, entry.senderId);
+    if (!rights.delete) {
+      // An admin without can_delete_messages gets the more specific reason.
+      await ctx.answerCallbackQuery({
+        text: rights.refresh ? CANNOT_DELETE : NOT_AUTHORIZED,
+        show_alert: true,
+      });
       return;
     }
 
