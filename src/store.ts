@@ -17,6 +17,13 @@ export interface StoredMessage {
   createdAt: number;
 }
 
+/**
+ * Hard ceiling on retained entries. The hourly sweep below handles the
+ * normal case; this bounds memory in the window between sweeps, when a
+ * burst of traffic could otherwise grow the map without limit.
+ */
+const MAX_ENTRIES = 10_000;
+
 const entries = new Map<string, StoredMessage>();
 
 export function createId(): string {
@@ -24,6 +31,13 @@ export function createId(): string {
 }
 
 export function saveMessage(id: string, data: Omit<StoredMessage, "createdAt">): void {
+  // Map preserves insertion order, so the first key is the oldest entry.
+  while (entries.size >= MAX_ENTRIES) {
+    const oldest = entries.keys().next();
+    if (oldest.done) break;
+    entries.delete(oldest.value);
+  }
+
   entries.set(id, { ...data, createdAt: Date.now() });
 }
 

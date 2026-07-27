@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import type { Platform } from "./types.js";
+import { bareHost, type Platform } from "./types.js";
 
 // X / Twitter status links -> FixTweet/FxTwitter-compatible domain.
 export const twitter: Platform = {
@@ -8,8 +8,8 @@ export const twitter: Platform = {
   emoji: "🐦",
 
   matches(url) {
-    const host = url.hostname.replace(/^www\./, "");
-    return (host === "twitter.com" || host === "x.com") && url.pathname.includes("/status/");
+    const host = bareHost(url);
+    return (host === "twitter.com" || host === "x.com") && /\/status\/\d+/.test(url.pathname);
   },
 
   async resolve(url) {

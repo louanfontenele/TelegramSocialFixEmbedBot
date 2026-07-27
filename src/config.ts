@@ -11,6 +11,50 @@ function optional(name: string, fallback: string): string {
   return value && value.length > 0 ? value : fallback;
 }
 
+/**
+ * Fails fast on a non-numeric value: silently falling back to NaN makes the
+ * bot misbehave in ways that are hard to trace back to a typo in .env.
+ */
+function positiveNumber(name: string, fallback: string): number {
+  const raw = optional(name, fallback);
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`Invalid ${name}="${raw}". Expected a positive number.`);
+  }
+  return value;
+}
+
+function idList(name: string): number[] {
+  return optional(name, "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const id = Number(entry);
+      if (!Number.isInteger(id)) {
+        throw new Error(`Invalid entry "${entry}" in ${name}. Expected a numeric chat id.`);
+      }
+      return id;
+    });
+}
+
+function domainList(name: string, fallback: string): string[] {
+  return optional(name, fallback)
+    .split(",")
+    .map((domain) => domain.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function optionalId(name: string): number | undefined {
+  const raw = process.env[name];
+  if (!raw) return undefined;
+  const id = Number(raw);
+  if (!Number.isInteger(id)) {
+    throw new Error(`Invalid ${name}="${raw}". Expected a numeric user id.`);
+  }
+  return id;
+}
+
 export type MessageStyle = "compact" | "structured" | "quote";
 
 const MESSAGE_STYLES: MessageStyle[] = ["compact", "structured", "quote"];
@@ -29,29 +73,32 @@ export const config = {
   domains: {
     twitter: optional("TWITTER_FIX_DOMAIN", "fixupx.com"),
     bluesky: optional("BLUESKY_FIX_DOMAIN", "fxbsky.app"),
-    instagram: optional("INSTAGRAM_FIX_DOMAIN", "ddinstagram.com"),
+    // Instagram fixers get blocked and replaced often, so this is a list
+    // tried in order. Mirrors the backends InstaEmbedRouter routes between.
+    // n.zzinstagram.com is the variant that embeds description + username,
+    // per InstaEmbedRouter's own docs; the rest are fallbacks.
+    instagram: domainList(
+      "INSTAGRAM_FIX_DOMAINS",
+      "n.zzinstagram.com,eeinstagram.com,kkinstagram.com,uuinstagram.com,vxinstagram.com",
+    ),
     tiktok: optional("TIKTOK_FIX_DOMAIN", "tfxktok.com"),
     // Empty string disables domain rewriting for YouTube.
     youtube: optional("YOUTUBE_FIX_DOMAIN", "koutube.com"),
   },
-  stateTtlMs: Number(optional("STATE_TTL_MINUTES", "1440")) * 60 * 1000,
+  stateTtlMs: positiveNumber("STATE_TTL_MINUTES", "1440") * 60 * 1000,
   access: {
     restrict: optional("RESTRICT_ACCESS", "false") === "true",
-    allowedChatIds: optional("ALLOWED_CHAT_IDS", "")
-      .split(",")
-      .map((id) => id.trim())
-      .filter(Boolean)
-      .map(Number),
-    ownerId: process.env.OWNER_USER_ID ? Number(process.env.OWNER_USER_ID) : undefined,
+    allowedChatIds: idList("ALLOWED_CHAT_IDS"),
+    ownerId: optionalId("OWNER_USER_ID"),
     // When restricted, leave any group the bot is added to that isn't allowlisted.
     autoLeave: optional("AUTO_LEAVE_UNAUTHORIZED", "true") === "true",
   },
   batching: {
     // Links are replied to in batches, pausing between them so a message
     // full of links doesn't hit Telegram's flood limits.
-    size: Number(optional("BATCH_SIZE", "10")),
-    cooldownMs: Number(optional("BATCH_COOLDOWN_SECONDS", "5")) * 1000,
+    size: positiveNumber("BATCH_SIZE", "10"),
+    cooldownMs: positiveNumber("BATCH_COOLDOWN_SECONDS", "5") * 1000,
     // Safety cap so one message can't tie up the bot indefinitely.
-    maxLinksPerMessage: Number(optional("MAX_LINKS_PER_MESSAGE", "50")),
+    maxLinksPerMessage: positiveNumber("MAX_LINKS_PER_MESSAGE", "50"),
   },
 };

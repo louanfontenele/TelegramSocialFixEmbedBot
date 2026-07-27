@@ -1,4 +1,4 @@
-import type { Bot } from "grammy";
+import { GrammyError, type Bot } from "grammy";
 import { config } from "../config.js";
 import { findPlatform } from "../platforms/index.js";
 import { deleteMessage, getMessage, updateMessage, type ResolvedLink } from "../store.js";
@@ -54,7 +54,9 @@ export function registerCallbackHandlers(bot: Bot): void {
   bot.callbackQuery(/^refresh:(.+)$/, async (ctx) => {
     const id = ctx.match[1];
     const entry = getMessage(id);
-    if (!entry) {
+    // The chat check keeps the rights lookup and the acted-on message in the
+    // same chat, so a click can never be evaluated against another group.
+    if (!entry || entry.chatId !== ctx.chat?.id) {
       await ctx.answerCallbackQuery({ text: EXPIRED, show_alert: true });
       return;
     }
@@ -69,18 +71,31 @@ export function registerCallbackHandlers(bot: Bot): void {
     updateMessage(id, link);
 
     const sender = { id: entry.senderId, name: entry.senderName };
-    await ctx.editMessageText(buildMessageText(sender, link), {
-      parse_mode: "HTML",
-      reply_markup: buildKeyboard(id, link),
-      link_preview_options: { url: link.fixedUrl },
-    });
-    await ctx.answerCallbackQuery({ text: "Atualizado!" });
+    try {
+      await ctx.editMessageText(buildMessageText(sender, link), {
+        parse_mode: "HTML",
+        reply_markup: buildKeyboard(id, link),
+        link_preview_options: { url: link.fixedUrl },
+      });
+      await ctx.answerCallbackQuery({ text: "Atualizado!" });
+    } catch (error) {
+      // Telegram rejects an edit that produces identical content, which is
+      // the common case when the link resolved the same way as before.
+      const unchanged = error instanceof GrammyError && error.description.includes("message is not modified");
+      await ctx.answerCallbackQuery({
+        text: unchanged ? "O link já está atualizado." : "Não foi possível atualizar agora.",
+        show_alert: !unchanged,
+      });
+      if (!unchanged) throw error;
+    }
   });
 
   bot.callbackQuery(/^delete:(.+)$/, async (ctx) => {
     const id = ctx.match[1];
     const entry = getMessage(id);
-    if (!entry) {
+    // The chat check keeps the rights lookup and the acted-on message in the
+    // same chat, so a click can never be evaluated against another group.
+    if (!entry || entry.chatId !== ctx.chat?.id) {
       await ctx.answerCallbackQuery({ text: EXPIRED, show_alert: true });
       return;
     }
@@ -95,7 +110,15 @@ export function registerCallbackHandlers(bot: Bot): void {
       return;
     }
 
-    await ctx.deleteMessage();
+    try {
+      await ctx.deleteMessage();
+    } catch {
+      // Already gone, or too old for the bot to remove - drop the state either way.
+      await ctx.answerCallbackQuery({ text: "Não foi possível excluir essa mensagem." });
+      deleteMessage(id);
+      return;
+    }
+
     deleteMessage(id);
     await ctx.answerCallbackQuery();
   });

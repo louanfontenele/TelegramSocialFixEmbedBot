@@ -3,6 +3,10 @@ import type { Platform } from "./types.js";
 
 const TRACKING_PARAMS = ["si", "feature", "pp", "ab_channel"];
 
+function bareHost(url: URL): string {
+  return url.hostname.toLowerCase().replace(/^(www|m|music)\./, "");
+}
+
 // YouTube links -> strip tracking params, then rewrite to koutube.com
 // (https://github.com/iGerman00/koutube), which mirrors youtube.com's
 // /watch?v= and /shorts/ path structure on its own domain.
@@ -12,16 +16,24 @@ export const youtube: Platform = {
   emoji: "▶️",
 
   matches(url) {
-    const host = url.hostname.replace(/^www\./, "").replace(/^m\./, "");
-    return host === "youtube.com" || host === "youtu.be";
+    const host = bareHost(url);
+
+    // A youtu.be link is always a video; on youtube.com only these paths
+    // are. Search results, channels and the home page have nothing to
+    // embed, and rewriting them would just point at a 404.
+    if (host === "youtu.be") return url.pathname.length > 1;
+    if (host !== "youtube.com") return false;
+    return (
+      (url.pathname === "/watch" && url.searchParams.has("v")) ||
+      /^\/(shorts|live|embed)\/[^/]+/.test(url.pathname)
+    );
   },
 
   async resolve(url) {
     const fixed = new URL(url.toString());
-    const host = fixed.hostname.replace(/^www\./, "").replace(/^m\./, "");
 
     // youtu.be/<id> has no /watch path, just the video id - normalize it.
-    if (host === "youtu.be") {
+    if (bareHost(fixed) === "youtu.be") {
       const videoId = fixed.pathname.slice(1);
       fixed.pathname = "/watch";
       fixed.search = "";

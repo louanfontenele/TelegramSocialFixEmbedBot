@@ -9,7 +9,7 @@ Supported platforms:
 | --------- | -------------------------------------------------------------------------- |
 | X/Twitter | Rewrites `x.com`/`twitter.com` status links to [FixupX/FxTwitter](https://github.com/FxEmbed/FxEmbed) |
 | Bluesky   | Rewrites `bsky.app` post links to [FxBsky](https://github.com/FxEmbed/FxEmbed) |
-| Instagram | Rewrites post/reel/tv links to an [InstaFix](https://github.com/Wikidepia/InstaFix)-compatible domain |
+| Instagram | Probes a list of [InstaEmbedRouter](https://github.com/Knoppiix/InstaEmbedRouter) backends and uses the first that serves an embed |
 | TikTok    | Follows redirects, then rewrites to [tfxktok.com](https://tfxktok.com/) |
 | YouTube   | Strips tracking params, rewrites to [koutube](https://github.com/iGerman00/koutube) |
 | Facebook  | Follows redirects and strips tracking params (no third-party embed fixer available) |
@@ -17,6 +17,25 @@ Supported platforms:
 All of the above use public hosted instances of these projects by default —
 no self-hosting required. Domains are configurable via environment
 variables (see `.env.example`) in case a public instance goes down.
+
+Instagram is the exception: its fixers get blocked and replaced often (the
+long-standing `ddinstagram.com` stopped responding once InstaFix was
+archived in April 2026), so `INSTAGRAM_FIX_DOMAINS` takes a *list*. Each
+candidate is probed against the actual post being shared and the first one
+serving Open Graph tags is used, then remembered for 10 minutes.
+
+## Security notes
+
+- Redirects for TikTok and Facebook links are followed one hop at a time
+  and each hop is validated: private, loopback and link-local addresses are
+  refused, and the chain may not leave the platform's own domains. Without
+  this, Facebook's `/l.php?u=` open redirect would let a posted link steer
+  the bot into requesting internal services or a cloud metadata endpoint.
+- Response bodies are discarded rather than buffered when only the final
+  URL matters.
+- Button clicks are authorized on click (Telegram has no per-user keyboard,
+  so the buttons are visible to everyone) and the stored chat is checked
+  against the clicking chat.
 
 ## How it works
 
@@ -90,6 +109,12 @@ npm install
 cp .env.example .env   # fill in BOT_TOKEN from @BotFather
 npm run dev
 ```
+
+**Required BotFather setting:** send `/setprivacy` to
+[@BotFather](https://t.me/BotFather), pick this bot, and choose **Disable**.
+With privacy mode enabled (the default) a bot only receives commands and
+replies directed at it, so it would never see the links people post and
+would appear to do nothing in groups.
 
 ## Production
 

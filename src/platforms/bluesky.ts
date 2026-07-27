@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import type { Platform } from "./types.js";
+import { bareHost, type Platform } from "./types.js";
 
 // Bluesky post links -> FxBsky-compatible domain.
 export const bluesky: Platform = {
@@ -8,8 +8,7 @@ export const bluesky: Platform = {
   emoji: "🦋",
 
   matches(url) {
-    const host = url.hostname.replace(/^www\./, "");
-    return host === "bsky.app" && url.pathname.includes("/post/");
+    return bareHost(url) === "bsky.app" && url.pathname.includes("/post/");
   },
 
   async resolve(url) {

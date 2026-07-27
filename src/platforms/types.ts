@@ -11,17 +11,92 @@ export const BROWSER_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-/** Follows redirects and returns the final URL, or null on failure. */
-export async function resolveFinalUrl(url: string): Promise<URL | null> {
+const MAX_REDIRECTS = 5;
+const REQUEST_TIMEOUT_MS = 10_000;
+
+/** Hostnames and IP ranges that must never be requested (SSRF guard). */
+const BLOCKED_HOST_PATTERNS = [
+  /^localhost$/i,
+  /\.local$/i,
+  /\.internal$/i,
+  /^127\./,
+  /^10\./,
+  /^192\.168\./,
+  /^172\.(1[6-9]|2\d|3[01])\./,
+  /^169\.254\./, // link-local, incl. cloud metadata at 169.254.169.254
+  /^0\./,
+  /^\[?::1\]?$/,
+  /^\[?f[cd][0-9a-f]{2}:/i, // IPv6 unique-local
+  /^\[?fe80:/i, // IPv6 link-local
+];
+
+function isBlockedHost(hostname: string): boolean {
+  return BLOCKED_HOST_PATTERNS.some((pattern) => pattern.test(hostname));
+}
+
+/**
+ * Hostname without the interchangeable front-end prefixes the platforms use
+ * for mobile and locale variants, so `m.facebook.com` and `www.facebook.com`
+ * are recognized the same way. `URL` already lowercases the host.
+ */
+export function bareHost(url: URL): string {
+  return url.hostname.replace(/^(www|m|mobile|web|music|[a-z]{2}-[a-z]{2})\./, "");
+}
+
+/** True when `hostname` is exactly `domain` or a subdomain of it. */
+export function isHostWithin(hostname: string, domains: string[]): boolean {
+  const host = hostname.toLowerCase();
+  return domains.some((domain) => host === domain || host.endsWith(`.${domain}`));
+}
+
+/**
+ * Follows redirects one hop at a time, refusing to request anything outside
+ * `allowedDomains` or pointing at a private/loopback address.
+ *
+ * Redirects are handled manually rather than with `redirect: "follow"`
+ * because platforms like Facebook expose open redirects (`/l.php?u=...`):
+ * left unchecked, a posted link could make the bot issue requests against
+ * its own network or a cloud metadata endpoint.
+ */
+export async function resolveFinalUrl(start: string, allowedDomains: string[]): Promise<URL | null> {
+  let current: URL;
   try {
-    const response = await fetch(url, {
-      method: "GET",
-      redirect: "follow",
-      headers: { "User-Agent": BROWSER_USER_AGENT },
-      signal: AbortSignal.timeout(10_000),
-    });
-    return new URL(response.url);
+    current = new URL(start);
   } catch {
     return null;
   }
+
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (current.protocol !== "https:" && current.protocol !== "http:") return null;
+    if (isBlockedHost(current.hostname)) return null;
+    if (!isHostWithin(current.hostname, allowedDomains)) return null;
+
+    let response: Response;
+    try {
+      response = await fetch(current, {
+        method: "GET",
+        redirect: "manual",
+        headers: { "User-Agent": BROWSER_USER_AGENT },
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch {
+      return null;
+    }
+
+    // Only the Location header matters; never buffer the page itself.
+    await response.body?.cancel().catch(() => {});
+
+    const location = response.headers.get("location");
+    if (response.status < 300 || response.status >= 400 || !location) {
+      return current;
+    }
+
+    try {
+      current = new URL(location, current);
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
 }

@@ -35,13 +35,21 @@ async function resolveLinks(text: string): Promise<ResolvedLink[]> {
     const platform = findPlatform(url);
     if (!platform) continue;
 
-    const fixedUrl = await platform.resolve(url);
+    let fixedUrl: string | null;
+    try {
+      fixedUrl = await platform.resolve(url);
+    } catch (error) {
+      console.error(`Failed to resolve ${platform.id} link:`, error);
+      continue;
+    }
     if (!fixedUrl || fixedUrl === rawUrl) continue;
 
     results.push({
       platformLabel: platform.label,
       platformEmoji: platform.emoji,
-      originalUrl: rawUrl,
+      // The normalized form, not the raw match: it goes into a button URL,
+      // and Telegram rejects the whole message if that URL is malformed.
+      originalUrl: url.toString(),
       fixedUrl,
     });
   }
@@ -55,9 +63,12 @@ function sleep(ms: number): Promise<void> {
 
 export function registerMessageHandler(bot: Bot): void {
   bot.on("message:text", async (ctx) => {
-    if (ctx.from?.is_bot) return;
+    // Without a real user there's nobody to credit or to authorize the
+    // buttons against, so anonymous admins and channel-posted messages
+    // are left alone rather than attributed to a placeholder id.
+    if (!ctx.from || ctx.from.is_bot) return;
 
-    const sender: Sender = { id: ctx.from?.id ?? 0, name: ctx.from?.first_name ?? "alguém" };
+    const sender: Sender = { id: ctx.from.id, name: ctx.from.first_name };
     if (!isAllowed(ctx.chat.id, sender.id)) {
       console.log(`Ignored message from disallowed chat ${ctx.chat.id} (user ${sender.id})`);
       return;
@@ -77,20 +88,25 @@ export function registerMessageHandler(bot: Bot): void {
       for (const link of links.slice(start, start + size)) {
         const id = createId();
 
-        const sent = await ctx.reply(buildMessageText(sender, link), {
-          parse_mode: "HTML",
-          reply_parameters: { message_id: ctx.message.message_id },
-          reply_markup: buildKeyboard(id, link),
-          link_preview_options: { url: link.fixedUrl },
-        });
+        try {
+          const sent = await ctx.reply(buildMessageText(sender, link), {
+            parse_mode: "HTML",
+            reply_parameters: { message_id: ctx.message.message_id },
+            reply_markup: buildKeyboard(id, link),
+            link_preview_options: { url: link.fixedUrl },
+          });
 
-        saveMessage(id, {
-          chatId: ctx.chat.id,
-          botMessageId: sent.message_id,
-          senderId: sender.id,
-          senderName: sender.name,
-          link,
-        });
+          saveMessage(id, {
+            chatId: ctx.chat.id,
+            botMessageId: sent.message_id,
+            senderId: sender.id,
+            senderName: sender.name,
+            link,
+          });
+        } catch (error) {
+          // One bad link shouldn't cost the sender the rest of their links.
+          console.error(`Failed to reply with ${link.fixedUrl}:`, error);
+        }
       }
     }
   });

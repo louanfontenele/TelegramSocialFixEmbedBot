@@ -1,4 +1,4 @@
-import { resolveFinalUrl, type Platform } from "./types.js";
+import { bareHost, resolveFinalUrl, type Platform } from "./types.js";
 
 // Facebook doesn't have a workable third-party embed fixer, so this only
 // resolves shortened fb.watch links and strips tracking params, keeping
@@ -12,12 +12,14 @@ export const facebook: Platform = {
   emoji: "📘",
 
   matches(url) {
-    const host = url.hostname.replace(/^www\./, "");
+    const host = bareHost(url);
     return host === "facebook.com" || host === "fb.watch";
   },
 
   async resolve(url) {
-    const final = await resolveFinalUrl(url.toString());
+    // Facebook's /l.php?u= is an open redirect, so the hop chain is pinned
+    // to Facebook's own domains.
+    const final = await resolveFinalUrl(url.toString(), ["facebook.com", "fb.watch", "fb.me"]);
     if (!final) return null;
 
     // Facebook forces a login wall for some content; just return the bare path.
