@@ -1,4 +1,4 @@
-import { bareHost, resolveFinalUrl, type Platform } from "./types.js";
+import { isHostWithin, resolveFinalUrl, type Platform } from "./types.js";
 
 // Facebook doesn't have a workable third-party embed fixer, so this only
 // resolves shortened fb.watch links and strips tracking params, keeping
@@ -9,11 +9,11 @@ const ESSENTIAL_PARAMS = ["v", "id", "story_fbid", "set", "post_id", "fbid", "vi
 export const facebook: Platform = {
   id: "facebook",
   label: "Facebook",
-  emoji: "📘",
+  emoji: "👤",
 
   matches(url) {
-    const host = bareHost(url);
-    return host === "facebook.com" || host === "fb.watch";
+    // isHostWithin covers m., web., mbasic., l. and the regional subdomains.
+    return isHostWithin(url.hostname, ["facebook.com", "fb.watch", "fb.me"]);
   },
 
   async resolve(url) {

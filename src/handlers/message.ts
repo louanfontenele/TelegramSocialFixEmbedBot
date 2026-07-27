@@ -2,6 +2,7 @@ import type { Bot } from "grammy";
 import { isAllowed } from "../access.js";
 import { config } from "../config.js";
 import { findPlatform } from "../platforms/index.js";
+import type { Platform } from "../platforms/types.js";
 import { createId, saveMessage, type ResolvedLink } from "../store.js";
 import { buildKeyboard, buildMessageText, type Sender } from "../ui.js";
 
@@ -14,16 +15,15 @@ function trimUrl(raw: string): string {
 }
 
 async function resolveLinks(text: string): Promise<ResolvedLink[]> {
-  const rawUrls = text.match(URL_REGEX) ?? [];
-  const results: ResolvedLink[] = [];
   const seen = new Set<string>();
+  const candidates: { url: URL; platform: Platform }[] = [];
 
-  for (const match of rawUrls) {
+  for (const match of text.match(URL_REGEX) ?? []) {
     const rawUrl = trimUrl(match);
     if (seen.has(rawUrl)) continue;
     seen.add(rawUrl);
 
-    if (results.length >= config.batching.maxLinksPerMessage) break;
+    if (candidates.length >= config.batching.maxLinksPerMessage) break;
 
     let url: URL;
     try {
@@ -33,28 +33,34 @@ async function resolveLinks(text: string): Promise<ResolvedLink[]> {
     }
 
     const platform = findPlatform(url);
-    if (!platform) continue;
-
-    let fixedUrl: string | null;
-    try {
-      fixedUrl = await platform.resolve(url);
-    } catch (error) {
-      console.error(`Failed to resolve ${platform.id} link:`, error);
-      continue;
-    }
-    if (!fixedUrl || fixedUrl === rawUrl) continue;
-
-    results.push({
-      platformLabel: platform.label,
-      platformEmoji: platform.emoji,
-      // The normalized form, not the raw match: it goes into a button URL,
-      // and Telegram rejects the whole message if that URL is malformed.
-      originalUrl: url.toString(),
-      fixedUrl,
-    });
+    if (platform) candidates.push({ url, platform });
   }
 
-  return results;
+  // Resolving in parallel: several of these make network calls, and in
+  // series a handful of links would add up to a visibly slow reply.
+  const resolved = await Promise.all(
+    candidates.map(async ({ url, platform }): Promise<ResolvedLink | null> => {
+      let fixedUrl: string | null;
+      try {
+        fixedUrl = await platform.resolve(url);
+      } catch (error) {
+        console.error(`Failed to resolve ${platform.id} link:`, error);
+        return null;
+      }
+      if (!fixedUrl || fixedUrl === url.toString()) return null;
+
+      return {
+        platformLabel: platform.label,
+        platformEmoji: platform.emoji,
+        // The normalized form, not the raw match: it goes into a button URL,
+        // and Telegram rejects the whole message if that URL is malformed.
+        originalUrl: url.toString(),
+        fixedUrl,
+      };
+    }),
+  );
+
+  return resolved.filter((link): link is ResolvedLink => link !== null);
 }
 
 function sleep(ms: number): Promise<void> {

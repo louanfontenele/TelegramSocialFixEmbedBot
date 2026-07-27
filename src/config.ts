@@ -97,6 +97,9 @@ export const config = {
       "n.zzinstagram.com,eeinstagram.com,kkinstagram.com,uuinstagram.com,vxinstagram.com",
     ),
     tiktok: optional("TIKTOK_FIX_DOMAIN", "tfxktok.com"),
+    // rxddit.com is fxreddit's own instance and is preferred, but it has
+    // been intermittently unable to reach Reddit; the rest are fallbacks.
+    reddit: domainList("REDDIT_FIX_DOMAINS", "rxddit.com,vxreddit.com,redditfix.com"),
     // Empty string disables domain rewriting for YouTube.
     youtube: optional("YOUTUBE_FIX_DOMAIN", "koutube.com"),
   },

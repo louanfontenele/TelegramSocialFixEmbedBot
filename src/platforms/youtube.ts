@@ -4,7 +4,11 @@ import type { Platform } from "./types.js";
 const TRACKING_PARAMS = ["si", "feature", "pp", "ab_channel"];
 
 function bareHost(url: URL): string {
-  return url.hostname.toLowerCase().replace(/^(www|m|music)\./, "");
+  return url.hostname
+    .toLowerCase()
+    .replace(/^(www|m|music)\./, "")
+    // The privacy-preserving embed host serves the same paths.
+    .replace(/^youtube-nocookie\.com$/, "youtube.com");
 }
 
 // YouTube links -> strip tracking params, then rewrite to koutube.com

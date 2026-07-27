@@ -1,7 +1,19 @@
 import { BROWSER_USER_AGENT } from "./types.js";
 
-const PROBE_TIMEOUT_MS = 8_000;
+const PROBE_TIMEOUT_MS = 5_000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * What counts as a working embed. Instagram always carries media, so a page
+ * without it is an error page; Reddit text posts legitimately have none, and
+ * a title is the strongest signal available there.
+ */
+export type EmbedKind = "media" | "title";
+
+const EMBED_PATTERNS: Record<EmbedKind, RegExp> = {
+  media: /property="og:(image|video)"/i,
+  title: /property="og:(title|image|video)"/i,
+};
 
 interface Cached {
   domain: string;
@@ -22,7 +34,12 @@ const lastKnownGood = new Map<string, Cached>();
  * generally up. The winner is remembered and tried first next time, keeping
  * the common case to a single request.
  */
-export async function pickLiveDomain(key: string, candidates: string[], path: string): Promise<string | null> {
+export async function pickLiveDomain(
+  key: string,
+  candidates: string[],
+  path: string,
+  requires: EmbedKind = "media",
+): Promise<string | null> {
   if (candidates.length === 0) return null;
 
   const cached = lastKnownGood.get(key);
@@ -31,10 +48,22 @@ export async function pickLiveDomain(key: string, candidates: string[], path: st
     ? [cached.domain, ...candidates.filter((domain) => domain !== cached.domain)]
     : candidates;
 
-  for (const domain of ordered) {
-    if (await servesEmbed(domain, path)) {
-      lastKnownGood.set(key, { domain, chosenAt: Date.now() });
-      return domain;
+  const [preferred, ...rest] = ordered;
+
+  // Fast path: the preferred backend alone. This is the steady state, and
+  // it keeps a normal link to a single request.
+  if (await servesEmbed(preferred, path, requires)) {
+    lastKnownGood.set(key, { domain: preferred, chosenAt: Date.now() });
+    return preferred;
+  }
+
+  // It failed, so race the rest instead of walking them one by one - trying
+  // five dead backends in series took long enough to stall the reply.
+  if (rest.length > 0) {
+    const winner = await firstSuccess(rest, path, requires);
+    if (winner) {
+      lastKnownGood.set(key, { domain: winner, chosenAt: Date.now() });
+      return winner;
     }
   }
 
@@ -48,7 +77,18 @@ export async function pickLiveDomain(key: string, candidates: string[], path: st
   return ordered[0];
 }
 
-async function servesEmbed(domain: string, path: string): Promise<boolean> {
+/**
+ * Resolves to the first domain that serves an embed, preferring earlier
+ * entries when several succeed, and to null if none do. Probes run
+ * concurrently so the wait is one timeout rather than one per candidate.
+ */
+async function firstSuccess(domains: string[], path: string, requires: EmbedKind): Promise<string | null> {
+  const results = await Promise.all(domains.map((domain) => servesEmbed(domain, path, requires)));
+  const index = results.indexOf(true);
+  return index === -1 ? null : domains[index];
+}
+
+async function servesEmbed(domain: string, path: string, requires: EmbedKind): Promise<boolean> {
   try {
     const response = await fetch(`https://${domain}${path}`, {
       // These services vary their output by crawler, so ask as Telegram does.
@@ -62,7 +102,7 @@ async function servesEmbed(domain: string, path: string): Promise<boolean> {
       return false;
     }
 
-    return /property="og:(image|video)"/i.test(await response.text());
+    return EMBED_PATTERNS[requires].test(await response.text());
   } catch {
     return false;
   }

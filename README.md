@@ -12,17 +12,31 @@ Supported platforms:
 | Instagram | Probes a list of [InstaEmbedRouter](https://github.com/Knoppiix/InstaEmbedRouter) backends and uses the first that serves an embed |
 | TikTok    | Follows redirects, then rewrites to [tfxktok.com](https://tfxktok.com/) |
 | YouTube   | Strips tracking params, rewrites to [koutube](https://github.com/iGerman00/koutube) |
+| Reddit    | Probes a list of [fxreddit](https://github.com/MinnDevelopment/fxreddit) backends (rxddit.com and friends) and uses the first that serves an embed |
 | Facebook  | Follows redirects and strips tracking params (no third-party embed fixer available) |
+
+### Link forms recognized
+
+| Platform  | Accepted hosts and paths |
+| --------- | ------------------------ |
+| X/Twitter | `x.com`, `twitter.com` (+ `www`/`m`/`mobile`) on `/status/` or `/statuses/`; `t.co` shortlinks, followed only as far as X's own domains |
+| Bluesky   | `bsky.app` on `/post/` |
+| Instagram | `instagram.com`, `instagr.am` on `/p/`, `/reel/`, `/reels/`, `/tv/`, with or without a leading username; `/share/` links are followed to their canonical post. Stories are left alone |
+| TikTok    | Any `*.tiktok.com`, covering `vm.`, `vt.`, `m.` and `/t/` shortlinks, resolved to the canonical video |
+| YouTube   | `youtube.com`, `youtu.be`, `youtube-nocookie.com` (+ `www`/`m`/`music`) on `/watch?v=`, `/shorts/`, `/live/`, `/embed/`. Channels, search and the home page are ignored |
+| Reddit    | Any `*.reddit.com` (`old`, `new`, `np`, `amp`, `m`) on `/r/…/comments/…`, `/r/…/s/…`, `/u/…`, `/user/…` or `/comments/…`; `redd.it` shortlinks. Direct media hosts (`i.redd.it`, `v.redd.it`) are left alone since Telegram embeds those already |
+| Facebook  | Any `*.facebook.com` (`m`, `web`, `mbasic`, …), `fb.watch`, `fb.me` |
 
 All of the above use public hosted instances of these projects by default —
 no self-hosting required. Domains are configurable via environment
 variables (see `.env.example`) in case a public instance goes down.
 
-Instagram is the exception: its fixers get blocked and replaced often (the
-long-standing `ddinstagram.com` stopped responding once InstaFix was
-archived in April 2026), so `INSTAGRAM_FIX_DOMAINS` takes a *list*. Each
-candidate is probed against the actual post being shared and the first one
-serving Open Graph tags is used, then remembered for 10 minutes.
+Instagram and Reddit are the exceptions: their fixers get blocked and
+replaced often (the long-standing `ddinstagram.com` stopped responding once
+InstaFix was archived in April 2026), so `INSTAGRAM_FIX_DOMAINS` and
+`REDDIT_FIX_DOMAINS` take a *list*. The preferred backend is probed against
+the actual post being shared; if it doesn't serve Open Graph tags the rest
+are raced concurrently, and the winner is remembered for 10 minutes.
 
 ## Security notes
 
@@ -143,7 +157,10 @@ src/
     message.ts            # detects links, replies with the fix
     callbacks.ts           # handles refresh/delete button clicks
   platforms/
-    twitter.ts, bluesky.ts, instagram.ts, tiktok.ts, youtube.ts, facebook.ts
+    twitter.ts, bluesky.ts, instagram.ts, tiktok.ts,
+    youtube.ts, reddit.ts, facebook.ts
+    types.ts                # Platform interface, host helpers, SSRF-safe fetch
+    failover.ts             # picks a live embed backend from a list
     index.ts                # platform registry
 ```
 
