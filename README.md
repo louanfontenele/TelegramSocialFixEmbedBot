@@ -20,11 +20,28 @@ variables (see `.env.example`) in case a public instance goes down.
 
 ## How it works
 
-1. Someone posts a message containing a supported link in a group.
-2. The bot replies with the fixed link(s) (Telegram renders the embed
-   automatically from the link's Open Graph tags) and credits the sender.
+1. Someone posts a message containing one or more supported links in a group.
+2. For each link, the bot sends a separate reply crediting the sender with
+   the fixed link (Telegram renders the embed automatically from the link's
+   Open Graph tags). One message per link, since Telegram only renders a
+   single link preview per message.
 3. Inline buttons let anyone open the original link, and let the original
-   sender or group admins refresh the embed or delete the bot's reply.
+   sender or group admins refresh the embed or delete that reply.
+
+## Restricting access
+
+By default the bot responds in any chat it's added to. To lock it down to
+specific groups (recommended, so randoms can't add it and spam it), set in
+`.env`:
+
+- `RESTRICT_ACCESS=true`
+- `ALLOWED_CHAT_IDS=` a comma-separated list of allowed chat ids
+- `OWNER_USER_ID=` your Telegram user id, always allowed regardless of chat
+  (handy for testing in a DM or another group)
+
+When a chat isn't allowed, the bot returns immediately without doing any
+link processing, and logs the chat id to the console so you can add it to
+`ALLOWED_CHAT_IDS`.
 
 ## Setup
 
@@ -54,6 +71,7 @@ src/
   bot.ts               # wires up the grammY bot instance
   index.ts              # entrypoint
   config.ts             # environment variables
+  access.ts             # chat/user allowlist gate
   store.ts              # in-memory state for button callbacks (TTL-based)
   ui.ts                  # message text / inline keyboard builders
   handlers/

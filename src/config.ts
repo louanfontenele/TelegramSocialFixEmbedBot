@@ -22,4 +22,13 @@ export const config = {
     youtube: optional("YOUTUBE_FIX_DOMAIN", "koutube.com"),
   },
   stateTtlMs: Number(optional("STATE_TTL_MINUTES", "1440")) * 60 * 1000,
+  access: {
+    restrict: optional("RESTRICT_ACCESS", "false") === "true",
+    allowedChatIds: optional("ALLOWED_CHAT_IDS", "")
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean)
+      .map(Number),
+    ownerId: process.env.OWNER_USER_ID ? Number(process.env.OWNER_USER_ID) : undefined,
+  },
 };

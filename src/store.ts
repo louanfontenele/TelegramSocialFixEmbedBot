@@ -13,7 +13,7 @@ export interface StoredMessage {
   botMessageId: number;
   senderId: number;
   senderName: string;
-  links: ResolvedLink[];
+  link: ResolvedLink;
   createdAt: number;
 }
 
@@ -31,10 +31,10 @@ export function getMessage(id: string): StoredMessage | undefined {
   return entries.get(id);
 }
 
-export function updateMessage(id: string, links: ResolvedLink[]): void {
+export function updateMessage(id: string, link: ResolvedLink): void {
   const existing = entries.get(id);
   if (existing) {
-    existing.links = links;
+    existing.link = link;
   }
 }
 

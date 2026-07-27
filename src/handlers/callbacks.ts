@@ -17,24 +17,15 @@ async function isAuthorized(bot: Bot, chatId: number, userId: number, senderId: 
   }
 }
 
-async function refreshLinks(links: ResolvedLink[]): Promise<ResolvedLink[]> {
-  const refreshed: ResolvedLink[] = [];
-
-  for (const link of links) {
-    let url: URL;
-    try {
-      url = new URL(link.originalUrl);
-    } catch {
-      refreshed.push(link);
-      continue;
-    }
-
+async function refreshLink(link: ResolvedLink): Promise<ResolvedLink> {
+  try {
+    const url = new URL(link.originalUrl);
     const platform = findPlatform(url);
     const fixedUrl = platform ? await platform.resolve(url) : null;
-    refreshed.push(fixedUrl ? { ...link, fixedUrl } : link);
+    return fixedUrl ? { ...link, fixedUrl } : link;
+  } catch {
+    return link;
   }
-
-  return refreshed;
 }
 
 export function registerCallbackHandlers(bot: Bot): void {
@@ -51,13 +42,13 @@ export function registerCallbackHandlers(bot: Bot): void {
       return;
     }
 
-    const links = await refreshLinks(entry.links);
-    updateMessage(id, links);
+    const link = await refreshLink(entry.link);
+    updateMessage(id, link);
 
-    await ctx.editMessageText(buildMessageText(entry.senderName, links), {
+    await ctx.editMessageText(buildMessageText(entry.senderName, link), {
       parse_mode: "HTML",
-      reply_markup: buildKeyboard(id, links),
-      link_preview_options: { url: links[0]?.fixedUrl },
+      reply_markup: buildKeyboard(id, link),
+      link_preview_options: { url: link.fixedUrl },
     });
     await ctx.answerCallbackQuery({ text: "Atualizado!" });
   });
