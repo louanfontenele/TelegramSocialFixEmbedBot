@@ -12,12 +12,13 @@ export const bluesky: Platform = {
   },
 
   async resolve(url) {
-    const original = canonicalize(url);
+    const base = canonicalize(url);
+    base.search = "";
+    base.hash = "";
+    const original = base.toString();
 
-    const fixed = new URL(original.toString());
+    const fixed = new URL(base.toString());
     fixed.hostname = config.domains.bluesky;
-    fixed.search = "";
-    fixed.hash = "";
 
     // FxBsky is the same FxEmbed project as fixupx and supports the same
     // /<lang> machine-translation suffix.
@@ -25,6 +26,6 @@ export const bluesky: Platform = {
       fixed.pathname = `${fixed.pathname.replace(/\/$/, "")}/${config.translate.language}`;
     }
 
-    return { original: original.toString(), fixed: fixed.toString() };
+    return { original, fixed: fixed.toString() };
   },
 };

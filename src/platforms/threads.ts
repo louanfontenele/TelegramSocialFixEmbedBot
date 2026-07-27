@@ -18,16 +18,17 @@ export const threads: Platform = {
   },
 
   async resolve(url) {
-    const original = canonicalize(url);
+    const base = canonicalize(url);
+    base.search = "";
+    base.hash = "";
+    const original = base.toString();
 
-    const domain = await pickLiveDomain("threads", config.domains.threads, original.pathname, "title");
+    const domain = await pickLiveDomain("threads", config.domains.threads, base.pathname, "title");
     if (!domain) return null;
 
-    const fixed = new URL(original.toString());
+    const fixed = new URL(base.toString());
     fixed.hostname = domain;
-    fixed.search = "";
-    fixed.hash = "";
 
-    return { original: original.toString(), fixed: fixed.toString() };
+    return { original, fixed: fixed.toString() };
   },
 };

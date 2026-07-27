@@ -28,16 +28,17 @@ export const deviantart: Platform = {
       target = resolved;
     }
 
-    const original = canonicalize(target);
+    const base = canonicalize(target);
+    base.search = "";
+    base.hash = "";
+    const original = base.toString();
 
-    const domain = await pickLiveDomain("deviantart", config.domains.deviantart, original.pathname);
+    const domain = await pickLiveDomain("deviantart", config.domains.deviantart, base.pathname);
     if (!domain) return null;
 
-    const fixed = new URL(original.toString());
+    const fixed = new URL(base.toString());
     fixed.hostname = domain;
-    fixed.search = "";
-    fixed.hash = "";
 
-    return { original: original.toString(), fixed: fixed.toString() };
+    return { original, fixed: fixed.toString() };
   },
 };

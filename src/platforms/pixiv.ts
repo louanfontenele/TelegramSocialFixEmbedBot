@@ -17,15 +17,27 @@ export const pixiv: Platform = {
   },
 
   async resolve(url) {
-    const original = canonicalize(url);
+    const base = canonicalize(url);
+    base.hash = "";
 
-    const domain = await pickLiveDomain("pixiv", config.domains.pixiv, original.pathname + original.search);
+    // The modern /artworks/:id path is self-contained and never needs a
+    // query; the legacy form's illust_id *is* the identifier, so it's kept
+    // and everything else (tracking or otherwise) is dropped.
+    if (ARTWORK_PATH.test(base.pathname)) {
+      base.search = "";
+    } else {
+      const illustId = base.searchParams.get("illust_id");
+      base.search = illustId ? `illust_id=${illustId}` : "";
+    }
+
+    const original = base.toString();
+
+    const domain = await pickLiveDomain("pixiv", config.domains.pixiv, base.pathname + base.search);
     if (!domain) return null;
 
-    const fixed = new URL(original.toString());
+    const fixed = new URL(base.toString());
     fixed.hostname = domain;
-    fixed.hash = "";
 
-    return { original: original.toString(), fixed: fixed.toString() };
+    return { original, fixed: fixed.toString() };
   },
 };

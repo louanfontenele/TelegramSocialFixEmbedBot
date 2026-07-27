@@ -35,20 +35,22 @@ export const reddit: Platform = {
   },
 
   async resolve(url) {
-    // old./new./np./amp./m. shares are common; the button should point at
-    // the normal site, not the alternate front-end.
-    const original = canonicalize(url);
+    // old./new./np./amp./m. shares are common, and the share sheet appends
+    // a tracking query (?utm_source=share&...) - the button should point
+    // at a clean link on the normal site, not a tracked mobile front-end.
+    const base = canonicalize(url);
+    base.search = "";
+    base.hash = "";
+    const original = base.toString();
 
     // A redd.it path is already the bare post id, which is exactly the
     // "direct id" route these backends expose - no rewriting needed.
-    const domain = await pickLiveDomain("reddit", config.domains.reddit, original.pathname, "title");
+    const domain = await pickLiveDomain("reddit", config.domains.reddit, base.pathname, "title");
     if (!domain) return null;
 
-    const fixed = new URL(original.toString());
+    const fixed = new URL(base.toString());
     fixed.hostname = domain;
-    fixed.search = "";
-    fixed.hash = "";
 
-    return { original: original.toString(), fixed: fixed.toString() };
+    return { original, fixed: fixed.toString() };
   },
 };

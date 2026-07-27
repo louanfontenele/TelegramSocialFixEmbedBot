@@ -26,38 +26,39 @@ export const facebook: Platform = {
 
     // m./web./mbasic. shares are common from phones; the button should
     // point at the normal site, not the mobile subdomain.
-    const original = canonicalize(final);
+    const base = canonicalize(final);
+    base.hash = "";
 
-    // Facebook forces a login wall for some content; offer the bare path.
-    if (original.pathname.includes("/login")) {
-      const fixed = new URL(original.toString());
-      fixed.search = "";
-      fixed.hash = "";
-      const bare = fixed.toString().replace(/\/$/, "");
-      return { original: original.toString(), fixed: bare };
+    // Facebook forces a login wall for some content; offer the bare path,
+    // with no query at all since none of it is meaningful there.
+    if (base.pathname.includes("/login")) {
+      base.search = "";
+      const bare = base.toString().replace(/\/$/, "");
+      return { original: bare, fixed: bare };
     }
 
-    if (REEL_OR_WATCH_PATH.test(original.pathname) && config.domains.facebookReel.length > 0) {
-      const domain = await pickLiveDomain("facebook-reel", config.domains.facebookReel, original.pathname);
+    // Keep only the params that actually identify the content - the rest
+    // is tracking, and this cleanup applies before branching so neither
+    // the button link nor the embed link ever carries it.
+    const cleanParams = new URLSearchParams();
+    for (const key of ESSENTIAL_PARAMS) {
+      const value = base.searchParams.get(key);
+      if (value !== null) cleanParams.set(key, value);
+    }
+    base.search = cleanParams.toString();
+    const original = base.toString().replace(/\/$/, "");
+
+    if (REEL_OR_WATCH_PATH.test(base.pathname) && config.domains.facebookReel.length > 0) {
+      const domain = await pickLiveDomain("facebook-reel", config.domains.facebookReel, base.pathname);
       if (domain) {
-        const fixed = new URL(original.toString());
+        const fixed = new URL(base.toString());
         fixed.hostname = domain;
-        fixed.hash = "";
-        return { original: original.toString(), fixed: fixed.toString() };
+        return { original, fixed: fixed.toString().replace(/\/$/, "") };
       }
       // No third-party backend served this reel either - fall through to
       // the tracking-cleaned Facebook link below rather than giving up.
     }
 
-    const fixed = new URL(original.toString());
-    const cleanParams = new URLSearchParams();
-    for (const key of ESSENTIAL_PARAMS) {
-      const value = fixed.searchParams.get(key);
-      if (value !== null) cleanParams.set(key, value);
-    }
-    fixed.search = cleanParams.toString();
-    fixed.hash = "";
-
-    return { original: original.toString(), fixed: fixed.toString().replace(/\/$/, "") };
+    return { original, fixed: original };
   },
 };

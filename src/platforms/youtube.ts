@@ -35,30 +35,34 @@ export const youtube: Platform = {
 
   async resolve(url) {
     // m./music. and the nocookie host are all the same content under a
-    // different front door - the "original link" button should point at
-    // the plain youtube.com/youtu.be page, not the mobile or embed variant.
-    const original = new URL(url.toString());
-    original.hostname = bareHost(url);
+    // different front door - the button should point at the plain
+    // youtube.com/youtu.be page, not the mobile or embed variant.
+    const base = new URL(url.toString());
+    base.hostname = bareHost(url);
+    base.hash = "";
 
-    const fixed = new URL(original.toString());
-
-    // youtu.be/<id> has no /watch path, just the video id - normalize it.
-    if (bareHost(fixed) === "youtu.be") {
-      const videoId = fixed.pathname.slice(1);
-      fixed.pathname = "/watch";
-      fixed.search = "";
-      fixed.searchParams.set("v", videoId);
+    // youtu.be/<id> has no /watch path, just the video id - normalize it
+    // to /watch?v= on both the original and the fixed link, so the button
+    // isn't left pointing at a bare, tracker-carrying shortlink.
+    if (bareHost(base) === "youtu.be") {
+      const videoId = base.pathname.slice(1);
+      base.hostname = "youtube.com";
+      base.pathname = "/watch";
+      base.search = "";
+      base.searchParams.set("v", videoId);
     } else {
       for (const param of TRACKING_PARAMS) {
-        fixed.searchParams.delete(param);
+        base.searchParams.delete(param);
       }
     }
-    fixed.hash = "";
 
+    const original = base.toString();
+
+    const fixed = new URL(base.toString());
     if (config.domains.youtube) {
       fixed.hostname = config.domains.youtube;
     }
 
-    return { original: original.toString(), fixed: fixed.toString() };
+    return { original, fixed: fixed.toString() };
   },
 };

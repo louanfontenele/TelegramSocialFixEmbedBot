@@ -26,13 +26,16 @@ export const tiktok: Platform = {
     const final = await resolveFinalUrl(url.toString(), ["tiktok.com"]);
     if (!final || !VIDEO_PATH.test(final.pathname)) return null;
 
-    const original = canonicalize(final);
+    // The redirect chain adds its own tracking query (_r, _t, share id...) -
+    // strip it so the button points at a bare, shareable video link.
+    const base = canonicalize(final);
+    base.search = "";
+    base.hash = "";
+    const original = base.toString();
 
-    const fixed = new URL(original.toString());
+    const fixed = new URL(base.toString());
     fixed.hostname = config.domains.tiktok;
-    fixed.search = "";
-    fixed.hash = "";
 
-    return { original: original.toString(), fixed: fixed.toString() };
+    return { original, fixed: fixed.toString() };
   },
 };

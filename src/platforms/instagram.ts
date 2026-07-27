@@ -32,16 +32,19 @@ export const instagram: Platform = {
       target = resolved;
     }
 
-    const original = canonicalize(target);
+    // igshid and similar tracking params ride along on every share - the
+    // button should point at a clean post link, not a tracked one.
+    const base = canonicalize(target);
+    base.search = "";
+    base.hash = "";
+    const original = base.toString();
 
-    const domain = await pickLiveDomain("instagram", config.domains.instagram, original.pathname);
+    const domain = await pickLiveDomain("instagram", config.domains.instagram, base.pathname);
     if (!domain) return null;
 
-    const fixed = new URL(original.toString());
+    const fixed = new URL(base.toString());
     fixed.hostname = domain;
-    fixed.search = "";
-    fixed.hash = "";
 
-    return { original: original.toString(), fixed: fixed.toString() };
+    return { original, fixed: fixed.toString() };
   },
 };

@@ -20,16 +20,17 @@ export const twitch: Platform = {
   },
 
   async resolve(url) {
-    const original = canonicalize(url);
+    const base = canonicalize(url);
+    base.search = "";
+    base.hash = "";
+    const original = base.toString();
 
-    const domain = await pickLiveDomain("twitch", config.domains.twitch, original.pathname);
+    const domain = await pickLiveDomain("twitch", config.domains.twitch, base.pathname);
     if (!domain) return null;
 
-    const fixed = new URL(original.toString());
+    const fixed = new URL(base.toString());
     fixed.hostname = domain;
-    fixed.search = "";
-    fixed.hash = "";
 
-    return { original: original.toString(), fixed: fixed.toString() };
+    return { original, fixed: fixed.toString() };
   },
 };

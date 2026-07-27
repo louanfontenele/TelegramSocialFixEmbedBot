@@ -47,7 +47,11 @@ async function resolveLinks(text: string): Promise<ResolvedLink[]> {
         console.error(`Failed to resolve ${platform.id} link:`, error);
         return null;
       }
-      if (!result || result.fixed === result.original) return null;
+      // Compared against what was actually pasted, not against .original:
+      // once .original is itself cleaned (see the platform modules), a
+      // link that only had tracking params stripped would otherwise have
+      // .fixed === .original and get treated as a no-op.
+      if (!result || result.fixed === url.toString()) return null;
 
       return {
         platformLabel: platform.label,

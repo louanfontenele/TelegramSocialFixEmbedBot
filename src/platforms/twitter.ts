@@ -30,21 +30,24 @@ export const twitter: Platform = {
       target = resolved;
     }
 
-    // m./mobile. shares are common from phones; the button should point at
-    // the normal site, not the mobile subdomain.
-    const original = canonicalize(target);
+    // m./mobile. shares are common from phones, and share links carry a
+    // tracking query (?s=.. &t=..) - the button should point at a clean
+    // link on the normal site, not a mobile subdomain with trackers.
+    const base = canonicalize(target);
+    base.search = "";
+    base.hash = "";
+    const original = base.toString();
 
-    const fixed = new URL(original.toString());
+    const fixed = new URL(base.toString());
     fixed.hostname = config.domains.twitter;
-    fixed.search = "";
-    fixed.hash = "";
 
     // fixupx/FxTwitter render a machine translation when the path ends in
-    // /<lang>, e.g. https://fixupx.com/i/status/123/pt.
+    // /<lang>, e.g. https://fixupx.com/i/status/123/pt. This only makes
+    // sense on the fixer link, not on the real X link.
     if (config.translate.enabled) {
       fixed.pathname = `${fixed.pathname.replace(/\/$/, "")}/${config.translate.language}`;
     }
 
-    return { original: original.toString(), fixed: fixed.toString() };
+    return { original, fixed: fixed.toString() };
   },
 };
