@@ -1,6 +1,6 @@
 import { config } from "../config.js";
 import { pickLiveDomain } from "./failover.js";
-import { bareHost, resolveFinalUrl, type Platform } from "./types.js";
+import { bareHost, canonicalize, resolveFinalUrl, type Platform } from "./types.js";
 
 // Optional leading username, e.g. /username/p/ABC as well as /p/ABC.
 const POST_PATH = /^\/(?:[^/]+\/)?(?:p|reel|reels|tv)\/[^/]+/;
@@ -32,13 +32,16 @@ export const instagram: Platform = {
       target = resolved;
     }
 
-    const domain = await pickLiveDomain("instagram", config.domains.instagram, target.pathname);
+    const original = canonicalize(target);
+
+    const domain = await pickLiveDomain("instagram", config.domains.instagram, original.pathname);
     if (!domain) return null;
 
-    const fixed = new URL(target.toString());
+    const fixed = new URL(original.toString());
     fixed.hostname = domain;
     fixed.search = "";
     fixed.hash = "";
-    return fixed.toString();
+
+    return { original: original.toString(), fixed: fixed.toString() };
   },
 };

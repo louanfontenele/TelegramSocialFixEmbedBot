@@ -1,5 +1,5 @@
 import { config } from "../config.js";
-import { bareHost, resolveFinalUrl, type Platform } from "./types.js";
+import { bareHost, canonicalize, resolveFinalUrl, type Platform } from "./types.js";
 
 const STATUS_PATH = /\/status(?:es)?\/\d+/;
 const SOURCE_HOSTS = ["twitter.com", "x.com"];
@@ -30,10 +30,21 @@ export const twitter: Platform = {
       target = resolved;
     }
 
-    const fixed = new URL(target.toString());
+    // m./mobile. shares are common from phones; the button should point at
+    // the normal site, not the mobile subdomain.
+    const original = canonicalize(target);
+
+    const fixed = new URL(original.toString());
     fixed.hostname = config.domains.twitter;
     fixed.search = "";
     fixed.hash = "";
-    return fixed.toString();
+
+    // fixupx/FxTwitter render a machine translation when the path ends in
+    // /<lang>, e.g. https://fixupx.com/i/status/123/pt.
+    if (config.translate.enabled) {
+      fixed.pathname = `${fixed.pathname.replace(/\/$/, "")}/${config.translate.language}`;
+    }
+
+    return { original: original.toString(), fixed: fixed.toString() };
   },
 };

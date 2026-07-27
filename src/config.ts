@@ -70,6 +70,16 @@ function optionalId(name: string): number | undefined {
   return id;
 }
 
+const LANGUAGE_CODE = /^[a-z]{2}$/;
+
+function languageCode(name: string, fallback: string): string {
+  const raw = optional(name, fallback).toLowerCase();
+  if (!LANGUAGE_CODE.test(raw)) {
+    throw new Error(`Invalid ${name}="${raw}". Expected a two-letter ISO 639-1 code, e.g. "pt".`);
+  }
+  return raw;
+}
+
 export type MessageStyle = "compact" | "structured" | "quote";
 
 const MESSAGE_STYLES: MessageStyle[] = ["compact", "structured", "quote"];
@@ -104,6 +114,14 @@ export const config = {
     youtube: optional("YOUTUBE_FIX_DOMAIN", "koutube.com"),
   },
   stateTtlMs: positiveNumber("STATE_TTL_MINUTES", "1440") * 60 * 1000,
+  // fxtwitter/fixupx and fxbsky are both FxEmbed under the hood and support
+  // appending /<lang> to show a machine translation alongside the original.
+  // Other fixers (Instagram, TikTok, Reddit) are unrelated projects and
+  // don't - this only applies to twitter and bluesky.
+  translate: {
+    enabled: boolean("TRANSLATE_LINKS", true),
+    language: languageCode("TRANSLATE_LANGUAGE", "pt"),
+  },
   // The "Original" button is always present; these two are optional.
   buttons: {
     refresh: boolean("SHOW_REFRESH_BUTTON", true),

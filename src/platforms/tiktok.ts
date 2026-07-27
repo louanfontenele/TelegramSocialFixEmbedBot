@@ -1,5 +1,10 @@
 import { config } from "../config.js";
-import { isHostWithin, resolveFinalUrl, type Platform } from "./types.js";
+import { canonicalize, isHostWithin, resolveFinalUrl, type Platform } from "./types.js";
+
+// What a resolved short link should look like. An unknown or expired
+// vm./vt.tiktok.com code redirects to the bare homepage (often with a
+// tracking query like ?_r=1) instead of failing outright.
+const VIDEO_PATH = /\/@[^/]+\/(?:video|photo)\/\d+/;
 
 // TikTok links (including short vm.tiktok.com/vt.tiktok.com links) -> follow
 // redirects to the canonical URL, then rewrite to a TikTok embed-fix domain.
@@ -15,13 +20,19 @@ export const tiktok: Platform = {
 
   async resolve(url) {
     // Short links redirect within TikTok's own domains; anything else is
-    // either useless to us or an attempt to steer the bot elsewhere.
+    // either useless to us or an attempt to steer the bot elsewhere. This
+    // also turns a vm./vt.tiktok.com shortlink into the full @user/video/id
+    // link, which is what the "original link" button should point at.
     const final = await resolveFinalUrl(url.toString(), ["tiktok.com"]);
-    if (!final) return null;
+    if (!final || !VIDEO_PATH.test(final.pathname)) return null;
 
-    final.hostname = config.domains.tiktok;
-    final.search = "";
-    final.hash = "";
-    return final.toString();
+    const original = canonicalize(final);
+
+    const fixed = new URL(original.toString());
+    fixed.hostname = config.domains.tiktok;
+    fixed.search = "";
+    fixed.hash = "";
+
+    return { original: original.toString(), fixed: fixed.toString() };
   },
 };

@@ -34,7 +34,13 @@ export const youtube: Platform = {
   },
 
   async resolve(url) {
-    const fixed = new URL(url.toString());
+    // m./music. and the nocookie host are all the same content under a
+    // different front door - the "original link" button should point at
+    // the plain youtube.com/youtu.be page, not the mobile or embed variant.
+    const original = new URL(url.toString());
+    original.hostname = bareHost(url);
+
+    const fixed = new URL(original.toString());
 
     // youtu.be/<id> has no /watch path, just the video id - normalize it.
     if (bareHost(fixed) === "youtu.be") {
@@ -53,6 +59,6 @@ export const youtube: Platform = {
       fixed.hostname = config.domains.youtube;
     }
 
-    return fixed.toString();
+    return { original: original.toString(), fixed: fixed.toString() };
   },
 };

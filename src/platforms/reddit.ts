@@ -1,6 +1,6 @@
 import { config } from "../config.js";
 import { pickLiveDomain } from "./failover.js";
-import { bareHost, isHostWithin, type Platform } from "./types.js";
+import { bareHost, canonicalize, isHostWithin, type Platform } from "./types.js";
 
 /**
  * The routes fxreddit exposes: a post under a subreddit or a user profile,
@@ -35,15 +35,20 @@ export const reddit: Platform = {
   },
 
   async resolve(url) {
+    // old./new./np./amp./m. shares are common; the button should point at
+    // the normal site, not the alternate front-end.
+    const original = canonicalize(url);
+
     // A redd.it path is already the bare post id, which is exactly the
     // "direct id" route these backends expose - no rewriting needed.
-    const domain = await pickLiveDomain("reddit", config.domains.reddit, url.pathname, "title");
+    const domain = await pickLiveDomain("reddit", config.domains.reddit, original.pathname, "title");
     if (!domain) return null;
 
-    const fixed = new URL(url.toString());
+    const fixed = new URL(original.toString());
     fixed.hostname = domain;
     fixed.search = "";
     fixed.hash = "";
-    return fixed.toString();
+
+    return { original: original.toString(), fixed: fixed.toString() };
   },
 };

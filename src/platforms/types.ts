@@ -1,10 +1,19 @@
+export interface Resolved {
+  /** The canonical link to the original content: mobile/legacy prefixes
+   *  stripped and shortlinks expanded, but otherwise untouched. This is
+   *  what the "original link" button points at. */
+  original: string;
+  /** The embeddable link, rewritten to a fixer domain. */
+  fixed: string;
+}
+
 export interface Platform {
   id: string;
   label: string;
   emoji: string;
   matches(url: URL): boolean;
-  /** Returns the fixed URL, or null if nothing useful could be done with it. */
-  resolve(url: URL): Promise<string | null>;
+  /** Returns null if nothing useful could be done with the link. */
+  resolve(url: URL): Promise<Resolved | null>;
 }
 
 export const BROWSER_USER_AGENT =
@@ -36,11 +45,19 @@ function isBlockedHost(hostname: string): boolean {
 
 /**
  * Hostname without the interchangeable front-end prefixes the platforms use
- * for mobile and locale variants, so `m.facebook.com` and `www.facebook.com`
- * are recognized the same way. `URL` already lowercases the host.
+ * for mobile, legacy and locale variants, so `m.facebook.com` and
+ * `www.facebook.com` are recognized - and displayed - the same way. `URL`
+ * already lowercases the host.
  */
 export function bareHost(url: URL): string {
-  return url.hostname.replace(/^(www|m|mobile|web|music|[a-z]{2}-[a-z]{2})\./, "");
+  return url.hostname.replace(/^(www|m|mobile|web|music|mbasic|old|new|np|amp|[a-z]{2}-[a-z]{2})\./, "");
+}
+
+/** `url` with its mobile/legacy prefix stripped; path, query and hash untouched. */
+export function canonicalize(url: URL): URL {
+  const canonical = new URL(url.toString());
+  canonical.hostname = bareHost(url);
+  return canonical;
 }
 
 /** True when `hostname` is exactly `domain` or a subdomain of it. */

@@ -61,6 +61,16 @@ are raced concurrently, and the winner is remembered for 10 minutes.
 3. Inline buttons let anyone open the original link, and let the original
    sender or group admins refresh the embed or delete that reply.
 
+The link a reply points to as "original" is always the canonical form:
+mobile and legacy subdomains (`m.`, `mobile.`, `old.`, `music.`, …) are
+stripped, and shortlinks (`t.co`, `vt.tiktok.com`, `fb.watch`, …) are
+expanded to the real link they redirect to.
+
+fixupx/FxTwitter and FxBsky (the same FxEmbed project) render a machine
+translation next to the original text when `TRANSLATE_LINKS=true` (the
+default) - see `TRANSLATE_LANGUAGE` in `.env.example`. Other fixers don't
+support this.
+
 Duplicate links in the same message are skipped, and replies go out in
 batches (`BATCH_SIZE`, default 10) with a pause between them
 (`BATCH_COOLDOWN_SECONDS`, default 5) so link-heavy messages don't trip
@@ -110,6 +120,12 @@ With `AUTO_LEAVE_UNAUTHORIZED=true` (the default) the bot goes further: if
 someone adds it to a group that isn't allowlisted, it posts a short notice
 and leaves right away. Groups the *owner* adds it to are exempt, so you can
 still set up a new group before allowlisting it.
+
+Channels are never allowed, unconditionally - not gated by
+`RESTRICT_ACCESS`, and with no owner exception. The bot posts a short
+notice (if it can) and leaves immediately. It only ever fixes links in
+regular groups and supergroups, topics included - a forum is still a
+supergroup as far as Telegram's API is concerned.
 
 To find a chat's id, send `/id` in it — the command only answers the
 `OWNER_USER_ID`, and works in any chat, including ones not yet allowlisted.

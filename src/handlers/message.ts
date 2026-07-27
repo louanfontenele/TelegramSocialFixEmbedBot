@@ -2,7 +2,7 @@ import type { Bot } from "grammy";
 import { isAllowed } from "../access.js";
 import { config } from "../config.js";
 import { findPlatform } from "../platforms/index.js";
-import type { Platform } from "../platforms/types.js";
+import type { Platform, Resolved } from "../platforms/types.js";
 import { createId, saveMessage, type ResolvedLink } from "../store.js";
 import { buildKeyboard, buildMessageText, type Sender } from "../ui.js";
 
@@ -40,22 +40,20 @@ async function resolveLinks(text: string): Promise<ResolvedLink[]> {
   // series a handful of links would add up to a visibly slow reply.
   const resolved = await Promise.all(
     candidates.map(async ({ url, platform }): Promise<ResolvedLink | null> => {
-      let fixedUrl: string | null;
+      let result: Resolved | null;
       try {
-        fixedUrl = await platform.resolve(url);
+        result = await platform.resolve(url);
       } catch (error) {
         console.error(`Failed to resolve ${platform.id} link:`, error);
         return null;
       }
-      if (!fixedUrl || fixedUrl === url.toString()) return null;
+      if (!result || result.fixed === result.original) return null;
 
       return {
         platformLabel: platform.label,
         platformEmoji: platform.emoji,
-        // The normalized form, not the raw match: it goes into a button URL,
-        // and Telegram rejects the whole message if that URL is malformed.
-        originalUrl: url.toString(),
-        fixedUrl,
+        originalUrl: result.original,
+        fixedUrl: result.fixed,
       };
     }),
   );
@@ -67,11 +65,19 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Regular groups and supergroups (topics included - a forum is still a
+// supergroup). Never private chats or channels: link-fixing is a group
+// feature, and channel posts arrive as channel_post updates anyway, which
+// this handler never sees - the check here is defense in depth.
+const GROUP_CHAT_TYPES = ["group", "supergroup"];
+
 export function registerMessageHandler(bot: Bot): void {
   bot.on("message:text", async (ctx) => {
+    if (!GROUP_CHAT_TYPES.includes(ctx.chat.type)) return;
+
     // Without a real user there's nobody to credit or to authorize the
-    // buttons against, so anonymous admins and channel-posted messages
-    // are left alone rather than attributed to a placeholder id.
+    // buttons against, so anonymous admins are left alone rather than
+    // attributed to a placeholder id.
     if (!ctx.from || ctx.from.is_bot) return;
 
     const sender: Sender = { id: ctx.from.id, name: ctx.from.first_name };

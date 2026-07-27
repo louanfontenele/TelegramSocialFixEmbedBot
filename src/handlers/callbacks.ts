@@ -44,8 +44,8 @@ async function refreshLink(link: ResolvedLink): Promise<ResolvedLink> {
   try {
     const url = new URL(link.originalUrl);
     const platform = findPlatform(url);
-    const fixedUrl = platform ? await platform.resolve(url) : null;
-    return fixedUrl ? { ...link, fixedUrl } : link;
+    const result = platform ? await platform.resolve(url) : null;
+    return result ? { ...link, originalUrl: result.original, fixedUrl: result.fixed } : link;
   } catch {
     return link;
   }
