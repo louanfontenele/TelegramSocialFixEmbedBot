@@ -28,6 +28,36 @@ variables (see `.env.example`) in case a public instance goes down.
 3. Inline buttons let anyone open the original link, and let the original
    sender or group admins refresh the embed or delete that reply.
 
+Duplicate links in the same message are skipped, and replies go out in
+batches (`BATCH_SIZE`, default 10) with a pause between them
+(`BATCH_COOLDOWN_SECONDS`, default 5) so link-heavy messages don't trip
+Telegram's flood limits.
+
+## Message style
+
+`MESSAGE_STYLE` picks how replies are formatted. The sender is always a
+clickable mention, which works even for users without a `@username`.
+
+`compact` (default):
+
+```
+📸 Instagram · enviado por Louan
+
+https://ddinstagram.com/p/xyz
+```
+
+`structured`:
+
+```
+🔗 Link Corrigido
+👤 Enviado por: Louan
+
+📸 https://ddinstagram.com/p/xyz
+```
+
+`quote` — the same header inside a Telegram blockquote card, followed by
+the link.
+
 ## Restricting access
 
 By default the bot responds in any chat it's added to. To lock it down to
@@ -42,6 +72,16 @@ specific groups (recommended, so randoms can't add it and spam it), set in
 When a chat isn't allowed, the bot returns immediately without doing any
 link processing, and logs the chat id to the console so you can add it to
 `ALLOWED_CHAT_IDS`.
+
+With `AUTO_LEAVE_UNAUTHORIZED=true` (the default) the bot goes further: if
+someone adds it to a group that isn't allowlisted, it posts a short notice
+and leaves right away. Groups the *owner* adds it to are exempt, so you can
+still set up a new group before allowlisting it.
+
+To find a chat's id, send `/id` in it — the command only answers the
+`OWNER_USER_ID`, and works in any chat, including ones not yet allowlisted.
+The usual setup flow is: add the bot to your group, run `/id`, copy the id
+into `ALLOWED_CHAT_IDS`, set `RESTRICT_ACCESS=true`, and restart.
 
 ## Setup
 

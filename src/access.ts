@@ -8,5 +8,11 @@ import { config } from "./config.js";
 export function isAllowed(chatId: number, userId: number): boolean {
   if (!config.access.restrict) return true;
   if (config.access.ownerId !== undefined && userId === config.access.ownerId) return true;
+  return isAllowedChat(chatId);
+}
+
+/** Chat-only check, for decisions not tied to a specific user's message. */
+export function isAllowedChat(chatId: number): boolean {
+  if (!config.access.restrict) return true;
   return config.access.allowedChatIds.includes(chatId);
 }
