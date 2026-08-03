@@ -1,7 +1,11 @@
-import { BROWSER_USER_AGENT } from "./types.js";
+import { BROWSER_USER_AGENT, resolveFinalUrl } from "./types.js";
 
 const PROBE_TIMEOUT_MS = 5_000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
+// Only the <head> og: tags are ever needed, so a probe response is read up
+// to this many bytes and no further - caps memory/time if a backend (or
+// whatever it redirects to) streams back something huge.
+const MAX_PROBE_BYTES = 64 * 1024;
 
 /**
  * What counts as a working embed. Instagram always carries media, so a page
@@ -80,7 +84,8 @@ export async function pickLiveDomain(
 /**
  * Resolves to the first domain that serves an embed, preferring earlier
  * entries when several succeed, and to null if none do. Probes run
- * concurrently so the wait is one timeout rather than one per candidate.
+ * concurrently, so the wait is one timeout (all of them settle in
+ * parallel) rather than one timeout per candidate in series.
  */
 async function firstSuccess(domains: string[], path: string, requires: EmbedKind): Promise<string | null> {
   const results = await Promise.all(domains.map((domain) => servesEmbed(domain, path, requires)));
@@ -90,19 +95,44 @@ async function firstSuccess(domains: string[], path: string, requires: EmbedKind
 
 async function servesEmbed(domain: string, path: string, requires: EmbedKind): Promise<boolean> {
   try {
-    const response = await fetch(`https://${domain}${path}`, {
+    // Redirects are followed hop-by-hop and pinned to this exact domain,
+    // the same guard resolveFinalUrl applies to platform redirects
+    // elsewhere - blind `redirect: "follow"` would let a hijacked or
+    // compromised fixer domain (several of these are unmaintained) redirect
+    // this probe straight into an internal address or metadata endpoint.
+    const final = await resolveFinalUrl(`https://${domain}${path}`, [domain]);
+    if (!final) return false;
+
+    const response = await fetch(final, {
       // These services vary their output by crawler, so ask as Telegram does.
       headers: { "User-Agent": `TelegramBot (like TwitterBot) ${BROWSER_USER_AGENT}` },
-      redirect: "follow",
+      redirect: "manual",
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
 
-    if (!response.ok) {
+    if (!response.ok || !response.body) {
       await response.body?.cancel().catch(() => {});
       return false;
     }
 
-    return EMBED_PATTERNS[requires].test(await response.text());
+    // Only the <head> og: tags matter, so the body is read in capped
+    // chunks rather than buffered whole via response.text().
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let html = "";
+    let bytesRead = 0;
+    try {
+      while (bytesRead < MAX_PROBE_BYTES) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytesRead += value.length;
+        html += decoder.decode(value, { stream: true });
+      }
+    } finally {
+      await reader.cancel().catch(() => {});
+    }
+
+    return EMBED_PATTERNS[requires].test(html);
   } catch {
     return false;
   }
