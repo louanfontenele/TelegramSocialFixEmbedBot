@@ -1,4 +1,5 @@
 import type { Bot } from "grammy";
+import { setTimeout as sleep } from "node:timers/promises";
 import { isAllowed } from "../access.js";
 import { config } from "../config.js";
 import { findPlatform } from "../platforms/index.js";
@@ -71,10 +72,6 @@ async function resolveLinks(text: string): Promise<ResolvedLink[]> {
     seenOriginal.add(link.originalUrl);
     return true;
   });
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // Regular groups and supergroups (topics included - a forum is still a

@@ -1,4 +1,4 @@
-import { nanoid } from "nanoid";
+import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
 
 export interface ResolvedLink {
@@ -27,7 +27,7 @@ const MAX_ENTRIES = 10_000;
 const entries = new Map<string, StoredMessage>();
 
 export function createId(): string {
-  return nanoid(10);
+  return randomUUID();
 }
 
 export function saveMessage(id: string, data: Omit<StoredMessage, "createdAt">): void {

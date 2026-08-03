@@ -15,8 +15,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "grammy": "^1.30.0",
-    "nanoid": "^5.0.9"
+    "grammy": "^1.30.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
