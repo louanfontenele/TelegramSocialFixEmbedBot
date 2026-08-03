@@ -62,7 +62,15 @@ async function resolveLinks(text: string): Promise<ResolvedLink[]> {
     }),
   );
 
-  return resolved.filter((link): link is ResolvedLink => link !== null);
+  // Two raw strings (http vs https, with vs without www) can resolve to
+  // the exact same content - dedupe on the cleaned link so it isn't posted
+  // twice.
+  const seenOriginal = new Set<string>();
+  return resolved.filter((link): link is ResolvedLink => {
+    if (!link || seenOriginal.has(link.originalUrl)) return false;
+    seenOriginal.add(link.originalUrl);
+    return true;
+  });
 }
 
 function sleep(ms: number): Promise<void> {

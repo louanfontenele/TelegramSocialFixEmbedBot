@@ -19,19 +19,22 @@ function mention(sender: Sender): string {
   return `<a href="tg://user?id=${sender.id}">${escapeHtml(sender.name)}</a>`;
 }
 
+// A raw "&" in a query string (e.g. Facebook's ?story_fbid=X&id=Y) is valid
+// in a URL but not in HTML text - Telegram's parse_mode=HTML expects it
+// escaped like any other text.
 const builders: Record<MessageStyle, (sender: Sender, link: ResolvedLink) => string> = {
   compact: (sender, link) =>
     `${link.platformEmoji} <b>${escapeHtml(link.platformLabel)}</b> · enviado por ${mention(sender)}` +
-    `\n\n${link.fixedUrl}`,
+    `\n\n${escapeHtml(link.fixedUrl)}`,
 
   structured: (sender, link) =>
     `🔗 <b>Link Corrigido</b>\n<i>👤 Enviado por</i>: ${mention(sender)}` +
-    `\n\n${link.platformEmoji} ${link.fixedUrl}`,
+    `\n\n${link.platformEmoji} ${escapeHtml(link.fixedUrl)}`,
 
   quote: (sender, link) =>
     `<blockquote>🔗 <b>Link Corrigido</b>\n` +
     `${link.platformEmoji} <b>${escapeHtml(link.platformLabel)}</b> · 👤 ${mention(sender)}</blockquote>` +
-    `\n\n${link.fixedUrl}`,
+    `\n\n${escapeHtml(link.fixedUrl)}`,
 };
 
 export function buildMessageText(sender: Sender, link: ResolvedLink): string {

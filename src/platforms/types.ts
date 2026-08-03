@@ -37,6 +37,7 @@ const BLOCKED_HOST_PATTERNS = [
   /^\[?::1\]?$/,
   /^\[?f[cd][0-9a-f]{2}:/i, // IPv6 unique-local
   /^\[?fe80:/i, // IPv6 link-local
+  /^\[?::ffff:/i, // IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1) - bypasses the IPv4 patterns above
 ];
 
 function isBlockedHost(hostname: string): boolean {
