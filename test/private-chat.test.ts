@@ -244,7 +244,7 @@ test("An invalid fixer produces a warning without publishing the corrected URL",
   const h = harness();
   await h.message(incoming(ownerId));
   assert.equal(h.calls.length, 1);
-  assert.match(h.calls[0].payload.text, /Não foi possível validar/);
+  assert.match(h.calls[0].payload.text, /Nenhum serviço disponível/);
   assert.ok(!h.calls[0].payload.text.includes(fixedUrl));
   assert.equal(h.calls[0].payload.link_preview_options.is_disabled, true);
   assert.equal(h.calls[0].payload.reply_markup, undefined);

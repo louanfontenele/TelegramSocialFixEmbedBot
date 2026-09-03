@@ -48,7 +48,7 @@ export function buildValidationFailureText(
   originalUrl: string,
 ): string {
   return (
-    `⚠️ <b>Não foi possível validar o link corrigido</b>\n` +
+    `⚠️ <b>Nenhum serviço disponível conseguiu gerar uma prévia válida</b>\n` +
     `${platformEmoji} ${escapeHtml(platformLabel)} · enviado por ${mention(sender)}\n\n` +
     `<a href="${escapeHtml(originalUrl)}">Abrir link original</a>`
   );

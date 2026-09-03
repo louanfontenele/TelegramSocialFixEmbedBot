@@ -86,12 +86,13 @@ export async function pickLiveDomain(
     }
   }
 
-  // Nothing passed. Still answer with the first candidate: a link whose
-  // preview fails is visible and debuggable, whereas staying silent looks
-  // like the bot is broken. The warning names the cause.
+  // Nothing passed. Preserve the first candidate so the common verifier can
+  // reject it and report the failure with the canonical original link. This
+  // also keeps direct calls deterministic instead of silently switching to
+  // a URL that was already proven invalid.
   console.warn(
     `No ${key} backend served an embed for ${path}. Tried: ${ordered.join(", ")}. ` +
-      `Replying with ${ordered[0]} anyway.`,
+      `Returning ${ordered[0]} for final verification.`,
   );
   return ordered[0];
 }
