@@ -103,7 +103,7 @@ export const config = {
     // preferred first, then fallbacks. Keep this in sync with .env.example.
     instagram: domainList(
       "INSTAGRAM_FIX_DOMAINS",
-      "eeinstagram.com,kkinstagram.com,n.zzinstagram.com,toinstagram.com,fxig.seria.moe",
+      "fxig.seria.moe,eeinstagram.com,kkinstagram.com,n.zzinstagram.com,toinstagram.com",
     ),
     tiktok: optional("TIKTOK_FIX_DOMAIN", "tfxktok.com"),
     // rxddit.com is fxreddit's own instance and is preferred, but it has

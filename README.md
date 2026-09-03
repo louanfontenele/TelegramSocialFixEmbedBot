@@ -47,9 +47,9 @@ Instagram, Reddit, Bilibili, Threads, Twitch, Tumblr, Pixiv, DeviantArt and the
 Facebook Reel fixer all take a *list* rather than a single domain: this
 category of fixer gets blocked and replaced often (the long-standing
 `ddinstagram.com` stopped responding once InstaFix was archived in April
-2026). The preferred backend is probed against the actual post being
-shared; if it doesn't serve Open Graph tags the rest are raced
-concurrently, and the winner is remembered for 10 minutes.
+2026). The first configured domain is always probed alone as the principal.
+If it doesn't serve Open Graph tags, all remaining domains are raced
+concurrently and the first successful response is used.
 
 Native DeviantArt and Pixiv links often already carry working
 `og:title`/`og:image` on their own for plain single-image content - these
@@ -130,7 +130,7 @@ clickable mention, which works even for users without a `@username`.
 ```
 📸 Instagram · enviado por Louan
 
-https://eeinstagram.com/p/xyz
+https://fxig.seria.moe/p/xyz
 ```
 
 `structured`:
@@ -139,7 +139,7 @@ https://eeinstagram.com/p/xyz
 🔗 Link Corrigido
 👤 Enviado por: Louan
 
-📸 https://eeinstagram.com/p/xyz
+📸 https://fxig.seria.moe/p/xyz
 ```
 
 `quote` — the same header inside a Telegram blockquote card, followed by

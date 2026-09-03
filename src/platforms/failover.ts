@@ -1,7 +1,6 @@
 import { BROWSER_USER_AGENT, resolveFinalUrl } from "./types.js";
 
 const PROBE_TIMEOUT_MS = 5_000;
-const CACHE_TTL_MS = 10 * 60 * 1000;
 // Only the <head> og: tags are ever needed, so a probe response is read up
 // to this many bytes and no further - caps memory/time if a backend (or
 // whatever it redirects to) streams back something huge.
@@ -34,13 +33,6 @@ export function hasEmbedMetadata(html: string, requires: EmbedKind): boolean {
   return false;
 }
 
-interface Cached {
-  domain: string;
-  chosenAt: number;
-}
-
-const lastKnownGood = new Map<string, Cached>();
-
 /**
  * Telegram fetches the embed itself, so the bot has to hand it a domain that
  * is actually serving one: a dead backend yields a bare link with no preview.
@@ -50,8 +42,8 @@ const lastKnownGood = new Map<string, Cached>();
  *
  * Candidates are probed against the real path being shared, so the result
  * reflects whether *this* post embeds rather than whether the service is
- * generally up. The winner is remembered and tried first next time, keeping
- * the common case to a single request.
+ * generally up. The first configured domain is always tested alone. Only
+ * if it fails are all remaining domains raced concurrently.
  */
 export async function pickLiveDomain(
   key: string,
@@ -61,18 +53,11 @@ export async function pickLiveDomain(
 ): Promise<string | null> {
   if (candidates.length === 0) return null;
 
-  const cached = lastKnownGood.get(key);
-  const fresh = cached && candidates.includes(cached.domain) && Date.now() - cached.chosenAt < CACHE_TTL_MS;
-  const ordered = fresh
-    ? [cached.domain, ...candidates.filter((domain) => domain !== cached.domain)]
-    : candidates;
-
-  const [preferred, ...rest] = ordered;
+  const [preferred, ...rest] = candidates;
 
   // Fast path: the preferred backend alone. This is the steady state, and
   // it keeps a normal link to a single request.
   if (await servesEmbed(preferred, path, requires)) {
-    lastKnownGood.set(key, { domain: preferred, chosenAt: Date.now() });
     return preferred;
   }
 
@@ -80,10 +65,7 @@ export async function pickLiveDomain(
   // five dead backends in series took long enough to stall the reply.
   if (rest.length > 0) {
     const winner = await firstSuccess(rest, path, requires);
-    if (winner) {
-      lastKnownGood.set(key, { domain: winner, chosenAt: Date.now() });
-      return winner;
-    }
+    if (winner) return winner;
   }
 
   // Nothing passed. Preserve the first candidate so the common verifier can
@@ -91,22 +73,29 @@ export async function pickLiveDomain(
   // also keeps direct calls deterministic instead of silently switching to
   // a URL that was already proven invalid.
   console.warn(
-    `No ${key} backend served an embed for ${path}. Tried: ${ordered.join(", ")}. ` +
-      `Returning ${ordered[0]} for final verification.`,
+    `No ${key} backend served an embed for ${path}. Tried: ${candidates.join(", ")}. ` +
+      `Returning ${candidates[0]} for final verification.`,
   );
-  return ordered[0];
+  return candidates[0];
 }
 
 /**
- * Resolves to the first domain that serves an embed, preferring earlier
- * entries when several succeed, and to null if none do. Probes run
- * concurrently, so the wait is one timeout (all of them settle in
- * parallel) rather than one timeout per candidate in series.
+ * Resolves as soon as one fallback serves an embed, and to null if none do.
+ * All fallback probes run concurrently, so a slow earlier fallback cannot
+ * delay a healthy later one.
  */
 async function firstSuccess(domains: string[], path: string, requires: EmbedKind): Promise<string | null> {
-  const results = await Promise.all(domains.map((domain) => servesEmbed(domain, path, requires)));
-  const index = results.indexOf(true);
-  return index === -1 ? null : domains[index];
+  try {
+    return await Promise.any(
+      domains.map(async (domain) => {
+        if (await servesEmbed(domain, path, requires)) return domain;
+        throw new Error(`${domain} did not serve an embed`);
+      }),
+    );
+  } catch (error) {
+    if (error instanceof AggregateError) return null;
+    throw error;
+  }
 }
 
 async function servesEmbed(domain: string, path: string, requires: EmbedKind): Promise<boolean> {
