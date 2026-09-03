@@ -2,6 +2,7 @@ import { GrammyError, type Bot } from "grammy";
 import { isOwner } from "../access.js";
 import { config } from "../config.js";
 import { findPlatform } from "../platforms/index.js";
+import { verifyResolvedLink } from "../platforms/verify.js";
 import { deleteMessage, getMessage, updateMessage, type ResolvedLink } from "../store.js";
 import { buildKeyboard, buildMessageText } from "../ui.js";
 
@@ -46,7 +47,9 @@ async function refreshLink(link: ResolvedLink): Promise<ResolvedLink> {
     const url = new URL(link.originalUrl);
     const platform = findPlatform(url);
     const result = platform ? await platform.resolve(url) : null;
-    return result ? { ...link, originalUrl: result.original, fixedUrl: result.fixed } : link;
+    if (!result) return link;
+    if (config.verifyLinksBeforeSend && !(await verifyResolvedLink(platform!.id, result))) return link;
+    return { ...link, originalUrl: result.original, fixedUrl: result.fixed };
   } catch {
     return link;
   }

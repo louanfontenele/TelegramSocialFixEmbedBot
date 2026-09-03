@@ -45,8 +45,8 @@ export const reddit: Platform = {
     if (!target || !reddit.matches(target)) return null;
     if (/^\/(?:r|u|user)\/[^/]+\/s\//i.test(target.pathname)) return null;
     const base = canonicalize(target);
-    // /comments/<id> works on Reddit itself and the manual RedditEZ mirror;
-    // a bare /<id> path is only understood by some fxreddit instances.
+    // Normalize short IDs to the route understood by every configured
+    // fxreddit-compatible backend.
     if (bareHost(base) === "redd.it") {
       base.hostname = "reddit.com";
       base.pathname = `/comments${base.pathname.replace(/\/$/, "")}`;

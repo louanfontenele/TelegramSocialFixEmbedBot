@@ -7,7 +7,9 @@ process.env.BOT_TOKEN = "123456:test-token";
 process.env.OWNER_USER_ID = "42";
 process.env.RESTRICT_ACCESS = "false";
 process.env.ALLOWED_CHAT_IDS = "";
-process.env.IMGUR_FIX_DOMAIN = "imgurez.com";
+process.env.TWITTER_FIX_DOMAIN = "fixupx.com";
+process.env.TRANSLATE_LINKS = "true";
+process.env.TRANSLATE_LANGUAGE = "pt";
 const { config } = await import("../src/config.js");
 const { registerMessageHandler } = await import("../src/handlers/message.js");
 const { registerCallbackHandlers } = await import("../src/handlers/callbacks.js");
@@ -15,8 +17,8 @@ const { deleteMessage, getMessage } = await import("../src/store.js");
 
 const ownerId = 42;
 const otherId = 99;
-const originalUrl = "https://imgur.com/a/xK77p";
-const fixedUrl = "https://imgurez.com/a/xK77p";
+const originalUrl = "https://x.com/example/status/12345";
+const fixedUrl = "https://fixupx.com/example/status/12345/pt";
 const botInfo: UserFromGetMe = {
   id: 123456, is_bot: true, first_name: "Test", username: "test_bot",
   can_join_groups: true, can_read_all_group_messages: true, supports_inline_queries: false,
@@ -31,6 +33,7 @@ beforeEach(() => {
   config.access.allowedChatIds = [];
   config.buttons.refresh = true;
   config.buttons.delete = true;
+  config.verifyLinksBeforeSend = false;
   networkRequests = [];
   mock.method(globalThis, "fetch", async (input: unknown) => {
     networkRequests.push(String(input));
@@ -63,7 +66,9 @@ function harness() {
     if (method === "sendMessage") {
       const p = payload as { chat_id: number; text: string; reply_markup: any };
       sent = { message_id: 100, date: 0, chat: { id: p.chat_id, type: "private", first_name: "Tester" }, from: botInfo, text: p.text };
-      const button = p.reply_markup.inline_keyboard.flat().find((b: any) => b.callback_data?.startsWith("refresh:"));
+      const button = p.reply_markup?.inline_keyboard
+        ?.flat()
+        .find((b: any) => b.callback_data?.startsWith("refresh:"));
       if (button) savedIds.push(button.callback_data.slice("refresh:".length));
       return { ok: true, result: sent } as any;
     }
@@ -210,6 +215,40 @@ test("Existing group access still allows ordinary users when open or allowlisted
   config.access.allowedChatIds = [-100];
   await h.message(incoming(otherId, "supergroup"));
   assert.deepEqual(h.calls.map((call) => call.method), ["sendMessage", "sendMessage"]);
+});
+
+test("Verified fixer metadata is required before a corrected link is sent", async () => {
+  config.verifyLinksBeforeSend = true;
+  mock.restoreAll();
+  mock.method(globalThis, "fetch", async (input: unknown) => {
+    networkRequests.push(String(input));
+    return new Response('<meta property="og:title" content="The expected post">');
+  });
+
+  const h = harness();
+  await h.message(incoming(ownerId));
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls[0].payload.link_preview_options.url, fixedUrl);
+  assert.equal(networkRequests.length, 2);
+});
+
+test("An invalid fixer produces a warning without publishing the corrected URL", async () => {
+  config.verifyLinksBeforeSend = true;
+  mock.restoreAll();
+  mock.method(globalThis, "fetch", async (input: unknown) => {
+    networkRequests.push(String(input));
+    return new Response("Service unavailable", { status: 503 });
+  });
+  mock.method(console, "warn", () => {});
+
+  const h = harness();
+  await h.message(incoming(ownerId));
+  assert.equal(h.calls.length, 1);
+  assert.match(h.calls[0].payload.text, /Não foi possível validar/);
+  assert.ok(!h.calls[0].payload.text.includes(fixedUrl));
+  assert.equal(h.calls[0].payload.link_preview_options.is_disabled, true);
+  assert.equal(h.calls[0].payload.reply_markup, undefined);
+  assert.equal(networkRequests.length, 2);
 });
 
 test("Restricted groups remain closed to unlisted users, with the owner exception", async () => {

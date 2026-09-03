@@ -1,4 +1,4 @@
-import { bareHost, BROWSER_USER_AGENT, isHostWithin, resolveFinalUrl } from "./types.js";
+import { BROWSER_USER_AGENT, resolveFinalUrl } from "./types.js";
 
 const PROBE_TIMEOUT_MS = 5_000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
@@ -19,9 +19,9 @@ const EMBED_PATTERNS: Record<EmbedKind, RegExp> = {
   title: /^og:(title|image|video)(?::(?:url|secure_url))?$/i,
 };
 
-/** Accept structured OG URL properties too: EmbedEZ video pages publish
- * og:video:url without an og:image or plain og:video tag. Empty tags and
- * width/height/type metadata alone do not describe an embed. */
+/** Accepts `property` and `name`, either attribute order and structured OG
+ * URL properties. Empty tags and width/height/type metadata do not prove
+ * that a usable preview exists. */
 export function hasEmbedMetadata(html: string, requires: EmbedKind): boolean {
   for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) {
     const attributes: Record<string, string> = {};
@@ -40,14 +40,6 @@ interface Cached {
 }
 
 const lastKnownGood = new Map<string, Cached>();
-
-// These two public manual mirrors redirect to EmbedEZ's public download
-// page. Permit only that page for the same original post, never arbitrary
-// EmbedEZ URLs or redirects from other backends. This is not an API call.
-const EMBEDEZ_SOURCES: Record<string, string> = {
-  "redditez.com": "reddit.com",
-  "tiktokez.com": "tiktok.com",
-};
 
 /**
  * Telegram fetches the embed itself, so the bot has to hand it a domain that
@@ -117,26 +109,30 @@ async function firstSuccess(domains: string[], path: string, requires: EmbedKind
 }
 
 async function servesEmbed(domain: string, path: string, requires: EmbedKind): Promise<boolean> {
+  return probeEmbedUrl(`https://${domain}${path}`, requires);
+}
+
+/** Checks the exact URL with Telegram's crawler identity. Browser-facing
+ * redirects are intentionally irrelevant here: Telegram must receive the
+ * metadata itself for the preview to work. */
+export async function probeEmbedUrl(url: string, requires: EmbedKind = "title"): Promise<boolean> {
   try {
-    const sourceHost = EMBEDEZ_SOURCES[domain];
-    const allowedDomains = sourceHost ? [domain, "embedez.com"] : [domain];
-    const final = await resolveFinalUrl(`https://${domain}${path}`, allowedDomains, (target) => {
-      if (isHostWithin(target.hostname, [domain])) return true;
-      if (!sourceHost || target.protocol !== "https:" || target.hostname !== "embedez.com" || target.pathname !== "/download") return false;
-      try {
-        const source = new URL(target.searchParams.get("q") ?? "");
-        return ["https:", "http:"].includes(source.protocol) &&
-          !source.username && !source.password && !source.port &&
-          bareHost(source) === sourceHost && source.pathname + source.search === path;
-      } catch {
-        return false;
-      }
-    });
+    const crawlerUserAgent = `TelegramBot (like TwitterBot) ${BROWSER_USER_AGENT}`;
+    const initial = new URL(url);
+    // Redirects are followed hop-by-hop and pinned to this exact domain,
+    // the same guard resolveFinalUrl applies to platform redirects
+    // elsewhere - blind `redirect: "follow"` would let a hijacked or
+    // compromised fixer domain (several of these are unmaintained) redirect
+    // this probe straight into an internal address or metadata endpoint.
+    // Use Telegram's crawler identity from the first request. Correct fixer
+    // services commonly redirect browsers to the original post while serving
+    // Open Graph metadata only to crawlers.
+    const final = await resolveFinalUrl(initial.toString(), [initial.hostname], crawlerUserAgent);
     if (!final) return false;
 
     const response = await fetch(final, {
       // These services vary their output by crawler, so ask as Telegram does.
-      headers: { "User-Agent": `TelegramBot (like TwitterBot) ${BROWSER_USER_AGENT}` },
+      headers: { "User-Agent": crawlerUserAgent },
       redirect: "manual",
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });

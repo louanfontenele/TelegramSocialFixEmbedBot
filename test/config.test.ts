@@ -13,15 +13,15 @@ function domains(overrides: Record<string, string> = {}) {
 test("Defaults preserve the requested Instagram/Reddit lists and FxEmbed", () => {
   const value = domains();
   assert.deepEqual(value.instagram, ["eeinstagram.com", "kkinstagram.com", "n.zzinstagram.com", "toinstagram.com", "fxig.seria.moe"]);
-  assert.deepEqual(value.reddit, ["rxddit.com", "vxreddit.com", "redditfix.com", "redditez.com"]);
-  assert.deepEqual(value.tiktok, ["tfxktok.com", "tiktokez.com"]);
+  assert.deepEqual(value.reddit, ["rxddit.com", "vxreddit.com", "redditfix.com"]);
+  assert.deepEqual(value.bilibili, ["vxbilibili.com"]);
+  assert.equal(value.tiktok, "tfxktok.com");
   assert.equal(value.twitter, "fixupx.com");
   assert.equal(value.bluesky, "fxbsky.app");
 });
 
-test("Legacy TikTok override works unless the new list is explicitly supplied", () => {
-  assert.deepEqual(domains({ TIKTOK_FIX_DOMAIN: "legacy.example" }).tiktok, ["legacy.example"]);
-  assert.deepEqual(domains({ TIKTOK_FIX_DOMAIN: "legacy.example", TIKTOK_FIX_DOMAINS: " tiktokez.com, TFXKTOK.COM " }).tiktok, ["tiktokez.com", "tfxktok.com"]);
+test("TikTok domain can be overridden", () => {
+  assert.equal(domains({ TIKTOK_FIX_DOMAIN: "custom.example" }).tiktok, "custom.example");
 });
 
 test(".env.example defines each fixer once and matches code defaults", () => {

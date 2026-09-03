@@ -79,7 +79,7 @@ export function isHostWithin(hostname: string, domains: string[]): boolean {
 export async function resolveFinalUrl(
   start: string,
   allowedDomains: string[],
-  allowedUrl?: (url: URL) => boolean,
+  userAgent = BROWSER_USER_AGENT,
 ): Promise<URL | null> {
   let current: URL;
   try {
@@ -93,14 +93,13 @@ export async function resolveFinalUrl(
     if (current.username || current.password || current.port) return null;
     if (isBlockedHost(current.hostname)) return null;
     if (!isHostWithin(current.hostname, allowedDomains)) return null;
-    if (allowedUrl && !allowedUrl(current)) return null;
 
     let response: Response;
     try {
       response = await fetch(current, {
         method: "GET",
         redirect: "manual",
-        headers: { "User-Agent": BROWSER_USER_AGENT },
+        headers: { "User-Agent": userAgent },
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
     } catch {

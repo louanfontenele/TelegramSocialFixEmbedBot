@@ -4,8 +4,9 @@ import { isAllowed, isOwner } from "../access.js";
 import { config } from "../config.js";
 import { findPlatform } from "../platforms/index.js";
 import type { Platform, Resolved } from "../platforms/types.js";
+import { verifyResolvedLink } from "../platforms/verify.js";
 import { createId, saveMessage, type ResolvedLink } from "../store.js";
-import { buildKeyboard, buildMessageText, type Sender } from "../ui.js";
+import { buildKeyboard, buildMessageText, buildValidationFailureText, type Sender } from "../ui.js";
 
 const URL_REGEX = /https?:\/\/\S+/g;
 
@@ -15,7 +16,16 @@ function trimUrl(raw: string): string {
   return raw.replace(/[.,;:!?)\]}'"]+$/, "");
 }
 
-async function resolveLinks(text: string): Promise<ResolvedLink[]> {
+interface FailedLink {
+  failed: true;
+  platformLabel: string;
+  platformEmoji: string;
+  originalUrl: string;
+}
+
+type ProcessedLink = ResolvedLink | FailedLink;
+
+async function resolveLinks(text: string): Promise<ProcessedLink[]> {
   const seen = new Set<string>();
   const candidates: { url: URL; platform: Platform }[] = [];
 
@@ -40,7 +50,7 @@ async function resolveLinks(text: string): Promise<ResolvedLink[]> {
   // Resolving in parallel: several of these make network calls, and in
   // series a handful of links would add up to a visibly slow reply.
   const resolved = await Promise.all(
-    candidates.map(async ({ url, platform }): Promise<ResolvedLink | null> => {
+    candidates.map(async ({ url, platform }): Promise<ProcessedLink | null> => {
       let result: Resolved | null;
       try {
         result = await platform.resolve(url);
@@ -53,6 +63,16 @@ async function resolveLinks(text: string): Promise<ResolvedLink[]> {
       // link that only had tracking params stripped would otherwise have
       // .fixed === .original and get treated as a no-op.
       if (!result || result.fixed === url.toString()) return null;
+
+      if (config.verifyLinksBeforeSend && !(await verifyResolvedLink(platform.id, result))) {
+        console.warn(`Rejected unverified ${platform.id} fixer URL: ${result.fixed}`);
+        return {
+          failed: true,
+          platformLabel: platform.label,
+          platformEmoji: platform.emoji,
+          originalUrl: result.original,
+        };
+      }
 
       return {
         platformLabel: platform.label,
@@ -67,7 +87,7 @@ async function resolveLinks(text: string): Promise<ResolvedLink[]> {
   // the exact same content - dedupe on the cleaned link so it isn't posted
   // twice.
   const seenOriginal = new Set<string>();
-  return resolved.filter((link): link is ResolvedLink => {
+  return resolved.filter((link): link is ProcessedLink => {
     if (!link || seenOriginal.has(link.originalUrl)) return false;
     seenOriginal.add(link.originalUrl);
     return true;
@@ -117,6 +137,22 @@ export function registerMessageHandler(bot: Bot): void {
       if (start > 0) await sleep(cooldownMs);
 
       for (const link of links.slice(start, start + size)) {
+        if ("failed" in link) {
+          try {
+            await ctx.reply(
+              buildValidationFailureText(sender, link.platformLabel, link.platformEmoji, link.originalUrl),
+              {
+                parse_mode: "HTML",
+                reply_parameters: { message_id: ctx.message.message_id },
+                link_preview_options: { is_disabled: true },
+              },
+            );
+          } catch (error) {
+            console.error(`Failed to report invalid fixer for ${link.originalUrl}:`, error);
+          }
+          continue;
+        }
+
         const id = createId();
 
         try {

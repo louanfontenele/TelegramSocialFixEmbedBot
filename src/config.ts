@@ -95,6 +95,7 @@ function messageStyle(): MessageStyle {
 export const config = {
   botToken: required("BOT_TOKEN"),
   messageStyle: messageStyle(),
+  verifyLinksBeforeSend: boolean("VERIFY_LINKS_BEFORE_SEND", true),
   domains: {
     twitter: optional("TWITTER_FIX_DOMAIN", "fixupx.com"),
     bluesky: optional("BLUESKY_FIX_DOMAIN", "fxbsky.app"),
@@ -104,19 +105,13 @@ export const config = {
       "INSTAGRAM_FIX_DOMAINS",
       "eeinstagram.com,kkinstagram.com,n.zzinstagram.com,toinstagram.com,fxig.seria.moe",
     ),
-    // The list takes precedence; the old singular override still works.
-    tiktok: domainList("TIKTOK_FIX_DOMAINS", optional("TIKTOK_FIX_DOMAIN", "tfxktok.com,tiktokez.com")),
+    tiktok: optional("TIKTOK_FIX_DOMAIN", "tfxktok.com"),
     // rxddit.com is fxreddit's own instance and is preferred, but it has
     // been intermittently unable to reach Reddit; the rest are fallbacks.
-    reddit: domainList("REDDIT_FIX_DOMAINS", "rxddit.com,vxreddit.com,redditfix.com,redditez.com"),
-    // Public manual domain replacements; no EmbedEZ API or account needed.
-    bilibili: optional("BILIBILI_FIX_DOMAIN", "bilibiliez.com"),
-    imgur: optional("IMGUR_FIX_DOMAIN", "imgurez.com"),
-    ifunny: optional("IFUNNY_FIX_DOMAIN", "ifunnyez.co"),
-    pinterest: optional("PINTEREST_FIX_DOMAIN", "pinterestez.com"),
-    weibo: optional("WEIBO_FIX_DOMAIN", "weiboez.com"),
-    snapchat: optional("SNAPCHAT_FIX_DOMAIN", "snapchatez.com"),
-    newgrounds: optional("NEWGROUNDS_FIX_DOMAIN", "newgroundsez.com"),
+    reddit: domainList("REDDIT_FIX_DOMAINS", "rxddit.com,vxreddit.com,redditfix.com"),
+    // BiliFix serves rich metadata to Telegram and redirects people who click
+    // the fixed link back to the original Bilibili page.
+    bilibili: domainList("BILIBILI_FIX_DOMAINS", "vxbilibili.com"),
     // Empty string disables domain rewriting for YouTube.
     youtube: optional("YOUTUBE_FIX_DOMAIN", "koutube.com"),
     // vxThreads and FixThreads are separate projects; either can be down

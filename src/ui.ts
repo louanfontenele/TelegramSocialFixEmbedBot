@@ -41,6 +41,19 @@ export function buildMessageText(sender: Sender, link: ResolvedLink): string {
   return builders[config.messageStyle](sender, link);
 }
 
+export function buildValidationFailureText(
+  sender: Sender,
+  platformLabel: string,
+  platformEmoji: string,
+  originalUrl: string,
+): string {
+  return (
+    `⚠️ <b>Não foi possível validar o link corrigido</b>\n` +
+    `${platformEmoji} ${escapeHtml(platformLabel)} · enviado por ${mention(sender)}\n\n` +
+    `<a href="${escapeHtml(originalUrl)}">Abrir link original</a>`
+  );
+}
+
 export function buildKeyboard(id: string, link: ResolvedLink): InlineKeyboard {
   // The original link is always offered; the action buttons are opt-out.
   // The label spells out what the button does - "Original" alone left people
