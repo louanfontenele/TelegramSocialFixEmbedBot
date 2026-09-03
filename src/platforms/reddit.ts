@@ -1,6 +1,6 @@
 import { config } from "../config.js";
 import { pickLiveDomain } from "./failover.js";
-import { bareHost, canonicalize, isHostWithin, type Platform } from "./types.js";
+import { bareHost, canonicalize, isHostWithin, resolveFinalUrl, type Platform } from "./types.js";
 
 /**
  * The routes fxreddit exposes: a post under a subreddit or a user profile,
@@ -38,13 +38,23 @@ export const reddit: Platform = {
     // old./new./np./amp./m. shares are common, and the share sheet appends
     // a tracking query (?utm_source=share&...) - the button should point
     // at a clean link on the normal site, not a tracked mobile front-end.
-    const base = canonicalize(url);
+    // Share tokens aren't post IDs: expand them before changing the domain.
+    const target = /^\/(?:r|u|user)\/[^/]+\/s\//i.test(url.pathname)
+      ? await resolveFinalUrl(url.toString(), ["reddit.com"])
+      : url;
+    if (!target || !reddit.matches(target)) return null;
+    if (/^\/(?:r|u|user)\/[^/]+\/s\//i.test(target.pathname)) return null;
+    const base = canonicalize(target);
+    // /comments/<id> works on Reddit itself and the manual RedditEZ mirror;
+    // a bare /<id> path is only understood by some fxreddit instances.
+    if (bareHost(base) === "redd.it") {
+      base.hostname = "reddit.com";
+      base.pathname = `/comments${base.pathname.replace(/\/$/, "")}`;
+    }
     base.search = "";
     base.hash = "";
     const original = base.toString();
 
-    // A redd.it path is already the bare post id, which is exactly the
-    // "direct id" route these backends expose - no rewriting needed.
     const domain = await pickLiveDomain("reddit", config.domains.reddit, base.pathname, "title");
     if (!domain) return null;
 

@@ -1,4 +1,4 @@
-import { BROWSER_USER_AGENT, resolveFinalUrl } from "./types.js";
+import { bareHost, BROWSER_USER_AGENT, isHostWithin, resolveFinalUrl } from "./types.js";
 
 const PROBE_TIMEOUT_MS = 5_000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
@@ -15,9 +15,24 @@ const MAX_PROBE_BYTES = 64 * 1024;
 export type EmbedKind = "media" | "title";
 
 const EMBED_PATTERNS: Record<EmbedKind, RegExp> = {
-  media: /property="og:(image|video)"/i,
-  title: /property="og:(title|image|video)"/i,
+  media: /^og:(image|video)(?::(?:url|secure_url))?$/i,
+  title: /^og:(title|image|video)(?::(?:url|secure_url))?$/i,
 };
+
+/** Accept structured OG URL properties too: EmbedEZ video pages publish
+ * og:video:url without an og:image or plain og:video tag. Empty tags and
+ * width/height/type metadata alone do not describe an embed. */
+export function hasEmbedMetadata(html: string, requires: EmbedKind): boolean {
+  for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) {
+    const attributes: Record<string, string> = {};
+    for (const match of tag.matchAll(/([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g)) {
+      attributes[match[1].toLowerCase()] = match[2] ?? match[3] ?? match[4];
+    }
+    const name = attributes.property ?? attributes.name ?? "";
+    if (EMBED_PATTERNS[requires].test(name) && attributes.content?.trim()) return true;
+  }
+  return false;
+}
 
 interface Cached {
   domain: string;
@@ -25,6 +40,14 @@ interface Cached {
 }
 
 const lastKnownGood = new Map<string, Cached>();
+
+// These two public manual mirrors redirect to EmbedEZ's public download
+// page. Permit only that page for the same original post, never arbitrary
+// EmbedEZ URLs or redirects from other backends. This is not an API call.
+const EMBEDEZ_SOURCES: Record<string, string> = {
+  "redditez.com": "reddit.com",
+  "tiktokez.com": "tiktok.com",
+};
 
 /**
  * Telegram fetches the embed itself, so the bot has to hand it a domain that
@@ -47,7 +70,7 @@ export async function pickLiveDomain(
   if (candidates.length === 0) return null;
 
   const cached = lastKnownGood.get(key);
-  const fresh = cached && Date.now() - cached.chosenAt < CACHE_TTL_MS;
+  const fresh = cached && candidates.includes(cached.domain) && Date.now() - cached.chosenAt < CACHE_TTL_MS;
   const ordered = fresh
     ? [cached.domain, ...candidates.filter((domain) => domain !== cached.domain)]
     : candidates;
@@ -95,12 +118,20 @@ async function firstSuccess(domains: string[], path: string, requires: EmbedKind
 
 async function servesEmbed(domain: string, path: string, requires: EmbedKind): Promise<boolean> {
   try {
-    // Redirects are followed hop-by-hop and pinned to this exact domain,
-    // the same guard resolveFinalUrl applies to platform redirects
-    // elsewhere - blind `redirect: "follow"` would let a hijacked or
-    // compromised fixer domain (several of these are unmaintained) redirect
-    // this probe straight into an internal address or metadata endpoint.
-    const final = await resolveFinalUrl(`https://${domain}${path}`, [domain]);
+    const sourceHost = EMBEDEZ_SOURCES[domain];
+    const allowedDomains = sourceHost ? [domain, "embedez.com"] : [domain];
+    const final = await resolveFinalUrl(`https://${domain}${path}`, allowedDomains, (target) => {
+      if (isHostWithin(target.hostname, [domain])) return true;
+      if (!sourceHost || target.protocol !== "https:" || target.hostname !== "embedez.com" || target.pathname !== "/download") return false;
+      try {
+        const source = new URL(target.searchParams.get("q") ?? "");
+        return ["https:", "http:"].includes(source.protocol) &&
+          !source.username && !source.password && !source.port &&
+          bareHost(source) === sourceHost && source.pathname + source.search === path;
+      } catch {
+        return false;
+      }
+    });
     if (!final) return false;
 
     const response = await fetch(final, {
@@ -132,7 +163,7 @@ async function servesEmbed(domain: string, path: string, requires: EmbedKind): P
       await reader.cancel().catch(() => {});
     }
 
-    return EMBED_PATTERNS[requires].test(html);
+    return hasEmbedMetadata(html, requires);
   } catch {
     return false;
   }

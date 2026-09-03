@@ -76,7 +76,11 @@ export function isHostWithin(hostname: string, domains: string[]): boolean {
  * left unchecked, a posted link could make the bot issue requests against
  * its own network or a cloud metadata endpoint.
  */
-export async function resolveFinalUrl(start: string, allowedDomains: string[]): Promise<URL | null> {
+export async function resolveFinalUrl(
+  start: string,
+  allowedDomains: string[],
+  allowedUrl?: (url: URL) => boolean,
+): Promise<URL | null> {
   let current: URL;
   try {
     current = new URL(start);
@@ -86,8 +90,10 @@ export async function resolveFinalUrl(start: string, allowedDomains: string[]): 
 
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     if (current.protocol !== "https:" && current.protocol !== "http:") return null;
+    if (current.username || current.password || current.port) return null;
     if (isBlockedHost(current.hostname)) return null;
     if (!isHostWithin(current.hostname, allowedDomains)) return null;
+    if (allowedUrl && !allowedUrl(current)) return null;
 
     let response: Response;
     try {

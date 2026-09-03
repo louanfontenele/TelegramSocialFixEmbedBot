@@ -99,17 +99,24 @@ export const config = {
     twitter: optional("TWITTER_FIX_DOMAIN", "fixupx.com"),
     bluesky: optional("BLUESKY_FIX_DOMAIN", "fxbsky.app"),
     // Instagram fixers get blocked and replaced often, so this is a list
-    // tried in order. Mirrors the backends InstaEmbedRouter routes between.
-    // n.zzinstagram.com is the variant that embeds description + username,
-    // per InstaEmbedRouter's own docs; the rest are fallbacks.
+    // preferred first, then fallbacks. Keep this in sync with .env.example.
     instagram: domainList(
       "INSTAGRAM_FIX_DOMAINS",
-      "n.zzinstagram.com,eeinstagram.com,kkinstagram.com,uuinstagram.com,vxinstagram.com",
+      "eeinstagram.com,kkinstagram.com,n.zzinstagram.com,toinstagram.com,fxig.seria.moe",
     ),
-    tiktok: optional("TIKTOK_FIX_DOMAIN", "tfxktok.com"),
+    // The list takes precedence; the old singular override still works.
+    tiktok: domainList("TIKTOK_FIX_DOMAINS", optional("TIKTOK_FIX_DOMAIN", "tfxktok.com,tiktokez.com")),
     // rxddit.com is fxreddit's own instance and is preferred, but it has
     // been intermittently unable to reach Reddit; the rest are fallbacks.
-    reddit: domainList("REDDIT_FIX_DOMAINS", "rxddit.com,vxreddit.com,redditfix.com"),
+    reddit: domainList("REDDIT_FIX_DOMAINS", "rxddit.com,vxreddit.com,redditfix.com,redditez.com"),
+    // Public manual domain replacements; no EmbedEZ API or account needed.
+    bilibili: optional("BILIBILI_FIX_DOMAIN", "bilibiliez.com"),
+    imgur: optional("IMGUR_FIX_DOMAIN", "imgurez.com"),
+    ifunny: optional("IFUNNY_FIX_DOMAIN", "ifunnyez.co"),
+    pinterest: optional("PINTEREST_FIX_DOMAIN", "pinterestez.com"),
+    weibo: optional("WEIBO_FIX_DOMAIN", "weiboez.com"),
+    snapchat: optional("SNAPCHAT_FIX_DOMAIN", "snapchatez.com"),
+    newgrounds: optional("NEWGROUNDS_FIX_DOMAIN", "newgroundsez.com"),
     // Empty string disables domain rewriting for YouTube.
     youtube: optional("YOUTUBE_FIX_DOMAIN", "koutube.com"),
     // vxThreads and FixThreads are separate projects; either can be down
@@ -131,8 +138,7 @@ export const config = {
   stateTtlMs: positiveNumber("STATE_TTL_MINUTES", "1440") * 60 * 1000,
   // fxtwitter/fixupx and fxbsky are both FxEmbed under the hood and support
   // appending /<lang> to show a machine translation alongside the original.
-  // Other fixers (Instagram, TikTok, Reddit) are unrelated projects and
-  // don't - this only applies to twitter and bluesky.
+  // This option is intentionally limited to Twitter and Bluesky.
   translate: {
     enabled: boolean("TRANSLATE_LINKS", true),
     language: languageCode("TRANSLATE_LANGUAGE", "pt"),

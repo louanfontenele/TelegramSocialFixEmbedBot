@@ -10,15 +10,22 @@ Supported platforms:
 | X/Twitter | Rewrites `x.com`/`twitter.com` status links to [FixupX/FxTwitter](https://github.com/FxEmbed/FxEmbed) |
 | Bluesky   | Rewrites `bsky.app` post links to [FxBsky](https://github.com/FxEmbed/FxEmbed) |
 | Instagram | Probes a list of [InstaEmbedRouter](https://github.com/Knoppiix/InstaEmbedRouter) backends and uses the first that serves an embed |
-| TikTok    | Follows redirects, then rewrites to [tfxktok.com](https://tfxktok.com/) |
+| TikTok    | Expands shortlinks; tries `tfxktok.com`, then the public `tiktokez.com` mirror |
 | YouTube   | Strips tracking params, rewrites to [koutube](https://github.com/iGerman00/koutube) |
-| Reddit    | Probes a list of [fxreddit](https://github.com/MinnDevelopment/fxreddit) backends (rxddit.com and friends) and uses the first that serves an embed |
+| Reddit    | Probes [fxreddit](https://github.com/MinnDevelopment/fxreddit) backends and the public `redditez.com` fallback |
 | Threads   | Probes [vxThreads](https://github.com/everettsouthwick/vxThreads)/[FixThreads](https://github.com/milanmdev/fixthreads) and uses the first that serves an embed |
 | Twitch (clips) | Rewrites `clips.twitch.tv` links to [fxtwitch](https://github.com/seriaati/fxtwitch) |
 | Tumblr    | Rewrites post links to [fxtumblr](https://github.com/knuxify/fxtumblr) |
 | Pixiv     | Rewrites artwork links to [Phixiv](https://github.com/thelaao/phixiv) |
 | DeviantArt | Rewrites deviation links to [fixdeviantart](https://github.com/Tschrock/fixdeviantart) |
 | Facebook  | Follows redirects and strips tracking params; Reels/Watch additionally try [facebed](https://github.com/4pii4/facebed) |
+| Bilibili | Manual replacement with `bilibiliez.com` |
+| Imgur | Manual replacement with `imgurez.com`; images, video pages, albums and galleries |
+| iFunny | Manual replacement with `ifunnyez.co` (the suffix is `.co`) |
+| Pinterest | Normalizes pin URLs and replaces the domain with `pinterestez.com` |
+| Weibo | Normalizes desktop/mobile/video URLs and replaces the domain with `weiboez.com` |
+| Snapchat | Public Spotlight and individual story links through `snapchatez.com` |
+| Newgrounds | Art, audio and portal entries through `newgroundsez.com` |
 
 ### Link forms recognized
 
@@ -27,7 +34,7 @@ Supported platforms:
 | X/Twitter | `x.com`, `twitter.com` (+ `www`/`m`/`mobile`) on `/status/` or `/statuses/`; `t.co` shortlinks, followed only as far as X's own domains |
 | Bluesky   | `bsky.app` on `/post/` |
 | Instagram | `instagram.com`, `instagr.am` on `/p/`, `/reel/`, `/reels/`, `/tv/`, with or without a leading username; `/share/` links are followed to their canonical post. Stories are left alone |
-| TikTok    | Any `*.tiktok.com`, covering `vm.`, `vt.`, `m.` and `/t/` shortlinks, resolved to the canonical video |
+| TikTok    | `*.tiktok.com` on `/@user/video/<id>` and `/@user/photo/<id>`; `vm.`, `vt.` and `/t/` shortlinks are expanded. `/@user/live` stays native |
 | YouTube   | `youtube.com`, `youtu.be`, `youtube-nocookie.com` (+ `www`/`m`/`music`) on `/watch?v=`, `/shorts/`, `/live/`, `/embed/`. Channels, search and the home page are ignored |
 | Reddit    | Any `*.reddit.com` (`old`, `new`, `np`, `amp`, `m`) on `/r/…/comments/…`, `/r/…/s/…`, `/u/…`, `/user/…` or `/comments/…`; `redd.it` shortlinks. Direct media hosts (`i.redd.it`, `v.redd.it`) are left alone since Telegram embeds those already |
 | Threads   | `threads.net`/`threads.com` on `/@user/post/…` |
@@ -36,18 +43,51 @@ Supported platforms:
 | Pixiv     | `pixiv.net` on `/artworks/…` (with or without a locale prefix like `/en/`) or the legacy `member_illust.php?illust_id=` form |
 | DeviantArt | `deviantart.com` on `/<user>/art/…`; the legacy `/view/<id>` form is expanded to the canonical path first |
 | Facebook  | Any `*.facebook.com` (`m`, `web`, `mbasic`, …), `fb.watch`, `fb.me` |
+| Bilibili | `bilibili.com` (+ `www`/`m`) on `/video/BV…`, `/video/av…`, `/opus/<id>`, `/bangumi/play/ep…` or `/ss…`, `/audio/au…`; `/festival/<name>?bvid=…`; `t.bilibili.com/<id>` becomes `/opus/<id>`; `b23.tv` shortlinks are expanded. Video `p` (part) and `t` (time) are preserved |
+| Imgur | `imgur.com` (+ `www`/`m`) on `/<id>`, `/a/<id>`, `/gallery/<id>`, optionally with descriptive slugs; `/t/<topic>/<id>`, `/topic/<topic>/<id>` and `/r/<subreddit>/<id>` become gallery URLs. Image extensions on page links and `i.imgur.com/<id>.gifv` become post URLs. Direct CDN JPG/PNG/GIF/MP4 URLs stay untouched |
+| iFunny | `ifunny.co` (+ `www`/`m`/`br`) on `/picture/…`, `/video/…`, `/gif/…`, `/meme/…`; tracking query removed |
+| Pinterest | `/pin/<id>` and `/pin/<slug>--<id>` on `pinterest.com`, regional subdomains such as `br.pinterest.com`, and explicit country domains such as `pinterest.ca`/`pinterest.co.uk`; `pin.it` shortlinks are expanded. Boards and profiles are ignored |
+| Weibo | `weibo.com/<user-id>/<post-id>`, `m.weibo.cn/status/<id>` or `/detail/<id>`, `weibo.com/tv/show/<fid>`, `video.weibo.com/show?fid=…`. The video identifier is kept, trackers removed |
+| Snapchat | `snapchat.com/spotlight/<id>`, `/@user/spotlight/<id>`, `/add/<user>/<snap-id>`; `/t/<code>` and `t.snapchat.com/<code>` are expanded. Profile-only and lens URLs are ignored |
+| Newgrounds | `newgrounds.com` (+ `www`/`m`) on `/art/view/<artist>/<slug>`, `/audio/listen/<id>`, `/portal/view/<id>`. A Flash/HTML5 game is not converted into a video |
 
 All of the above use public hosted instances of these projects by default —
 no self-hosting required. Domains are configurable via environment
 variables (see `.env.example`) in case a public instance goes down.
 
-Instagram, Reddit, Threads, Twitch, Tumblr, Pixiv, DeviantArt and the
+Instagram, TikTok, Reddit, Threads, Twitch, Tumblr, Pixiv, DeviantArt and the
 Facebook Reel fixer all take a *list* rather than a single domain: this
 category of fixer gets blocked and replaced often (the long-standing
 `ddinstagram.com` stopped responding once InstaFix was archived in April
 2026). The preferred backend is probed against the actual post being
 shared; if it doesn't serve Open Graph tags the rest are raced
-concurrently, and the winner is remembered for 10 minutes.
+concurrently in configured priority order, and the winner is remembered for
+10 minutes. If all fail, the preferred candidate is returned with a log
+warning; that does not mean its preview works.
+
+### Manual EmbedEZ links
+
+The seven new adapters above only build public URLs documented in the
+[EmbedEZ manual guide](https://embedez.com/how-to-use). They do not use an
+API key, subscription, paid bot, or downloader API. Full content URLs can
+be rewritten without fetching their source; only shortlinks need expansion.
+The same manual mechanism supplies the TikTok and Reddit alternatives.
+
+`TIKTOK_FIX_DOMAINS=tfxktok.com,tiktokez.com` enables failover. To choose
+EmbedEZ directly, set `TIKTOK_FIX_DOMAINS=tiktokez.com`. The old
+`TIKTOK_FIX_DOMAIN` variable remains supported when the list is absent.
+Twitter and Bluesky retain FxEmbed and their translation option.
+
+The `.env.example` and code defaults use the same Instagram list:
+`eeinstagram.com,kkinstagram.com,n.zzinstagram.com,toinstagram.com,fxig.seria.moe`.
+Reddit uses `rxddit.com,vxreddit.com,redditfix.com,redditez.com`.
+
+Manual conversion and a working Telegram preview are separate outcomes.
+On September 3, 2026, the sampled mirrors redirected to EmbedEZ download
+pages. See the [research and live HTTP results](docs/embed-support.md) for
+what those responses actually contained. Telegram renders at most one
+preview per reply; support for album URLs does not mean this bot uploads
+every album image as a Telegram media group.
 
 Native DeviantArt and Pixiv links often already carry working
 `og:title`/`og:image` on their own for plain single-image content - these
@@ -66,18 +106,24 @@ title-and-thumbnail card; the actual video is only reachable from a script
 blob, not an `og:video` tag, and nothing can make it play inline without
 someone building and hosting a proxy for it.
 
-**Bilibili, PTT** were left out as Chinese/Taiwanese-language platforms
-with limited relevance to this bot's audience. **FurAffinity, Iwara** were
-left out as adult-content-oriented communities.
+**PTT, FurAffinity and Iwara** have no adapters in this bot.
+**Dumpert** is listed by EmbedEZ as bot/download-only, so it is excluded
+from this manual-domain integration. Xiaohongshu is listed as coming soon.
 
 ## Security notes
 
-- Redirects for TikTok, Facebook, X (`t.co`), Instagram (`/share/`) and
-  DeviantArt (`/view/`) links are followed one hop at a time
+- Redirects for TikTok, Facebook, X (`t.co`), Instagram (`/share/`),
+  DeviantArt (`/view/`), Bilibili (`b23.tv`), Pinterest (`pin.it`),
+  Snapchat and Reddit share links are followed one hop at a time
   and each hop is validated: private, loopback and link-local addresses are
   refused, and the chain may not leave the platform's own domains. Without
   this, Facebook's `/l.php?u=` open redirect would let a posted link steer
   the bot into requesting internal services or a cloud metadata endpoint.
+- Incoming URLs and redirect hops with credentials or nonstandard ports
+  are rejected. Embed probes normally stay within their fixer domain.
+  Only `redditez.com` and `tiktokez.com` may redirect to
+  `https://embedez.com/download?q=…`, with the same original post in `q`;
+  API routes, unrelated posts and arbitrary subdomains are refused.
 - Response bodies are discarded rather than buffered when only the final
   URL matters.
 - Button clicks are authorized on click (Telegram has no per-user keyboard,
@@ -101,8 +147,8 @@ expanded to the real link they redirect to.
 
 fixupx/FxTwitter and FxBsky (the same FxEmbed project) render a machine
 translation next to the original text when `TRANSLATE_LINKS=true` (the
-default) - see `TRANSLATE_LANGUAGE` in `.env.example`. Other fixers don't
-support this.
+default) - see `TRANSLATE_LANGUAGE` in `.env.example`. This bot applies
+that setting only to Twitter and Bluesky.
 
 Duplicate links in the same message are skipped, and replies go out in
 batches (`BATCH_SIZE`, default 10) with a pause between them
@@ -119,7 +165,7 @@ clickable mention, which works even for users without a `@username`.
 ```
 📸 Instagram · enviado por Louan
 
-https://ddinstagram.com/p/xyz
+https://eeinstagram.com/p/xyz
 ```
 
 `structured`:
@@ -128,7 +174,7 @@ https://ddinstagram.com/p/xyz
 🔗 Link Corrigido
 👤 Enviado por: Louan
 
-📸 https://ddinstagram.com/p/xyz
+📸 https://eeinstagram.com/p/xyz
 ```
 
 `quote` — the same header inside a Telegram blockquote card, followed by
@@ -208,7 +254,9 @@ src/
   platforms/
     twitter.ts, bluesky.ts, instagram.ts, tiktok.ts, youtube.ts,
     reddit.ts, threads.ts, twitch.ts, tumblr.ts, pixiv.ts,
-    deviantart.ts, facebook.ts
+    deviantart.ts, facebook.ts, bilibili.ts, imgur.ts, ifunny.ts,
+    pinterest.ts, weibo.ts, snapchat.ts, newgrounds.ts
+    manual.ts               # pure public-domain replacement helper
     types.ts                # Platform interface, host helpers, SSRF-safe fetch
     failover.ts             # picks a live embed backend from a list
     index.ts                # platform registry
@@ -217,6 +265,28 @@ src/
 Each platform module is a small, independent adapter (`matches()` +
 `resolve()`). Swapping which public instance a platform uses, or later
 adding a self-hosted fallback, only touches that one file.
+
+## Validation
+
+```bash
+npm test
+npm run typecheck
+npm run build
+```
+
+The deterministic tests cover URL variants, preserved content selectors,
+ignored paths, domain overrides, redirect restrictions, failover, legacy
+TikTok configuration, FxEmbed regression, and group reply generation with
+canonical deduplication. They mock networking and require no Telegram token.
+
+To refresh the optional live public-page report (network access required):
+
+```bash
+npx tsx scripts/check-public-links.ts
+```
+
+This reads original pages and public mirror links and writes
+`docs/public-link-check.json`. It does not send messages or call paid APIs.
 
 ## License
 
