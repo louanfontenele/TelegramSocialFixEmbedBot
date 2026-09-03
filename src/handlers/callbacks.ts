@@ -1,4 +1,5 @@
 import { GrammyError, type Bot } from "grammy";
+import { isOwner } from "../access.js";
 import { config } from "../config.js";
 import { findPlatform } from "../platforms/index.js";
 import { deleteMessage, getMessage, updateMessage, type ResolvedLink } from "../store.js";
@@ -28,7 +29,7 @@ const ALL_RIGHTS: Rights = { refresh: true, delete: true };
  */
 async function rightsOf(bot: Bot, chatId: number, userId: number, senderId: number): Promise<Rights> {
   if (userId === senderId) return ALL_RIGHTS;
-  if (config.access.ownerId !== undefined && userId === config.access.ownerId) return ALL_RIGHTS;
+  if (isOwner(userId)) return ALL_RIGHTS;
 
   try {
     const member = await bot.api.getChatMember(chatId, userId);
@@ -53,6 +54,9 @@ async function refreshLink(link: ResolvedLink): Promise<ResolvedLink> {
 
 export function registerCallbackHandlers(bot: Bot): void {
   bot.callbackQuery(/^refresh:(.+)$/, async (ctx) => {
+    // Recheck ownership on every private-chat click, including old messages
+    // from before OWNER_USER_ID was changed or removed.
+    if (ctx.chat?.type === "private" && !isOwner(ctx.from.id)) return;
     // Messages sent before the button was turned off still show it, so the
     // action has to be refused here too, not just hidden from the keyboard.
     if (!config.buttons.refresh) {
@@ -85,13 +89,13 @@ export function registerCallbackHandlers(bot: Bot): void {
         reply_markup: buildKeyboard(id, link),
         link_preview_options: { url: link.fixedUrl },
       });
-      await ctx.answerCallbackQuery({ text: "Atualizado!" });
+      await ctx.answerCallbackQuery({ text: "Link reprocessado." });
     } catch (error) {
       // Telegram rejects an edit that produces identical content, which is
       // the common case when the link resolved the same way as before.
       const unchanged = error instanceof GrammyError && error.description.includes("message is not modified");
       await ctx.answerCallbackQuery({
-        text: unchanged ? "O link já está atualizado." : "Não foi possível atualizar agora.",
+        text: unchanged ? "O link não mudou. O Telegram pode manter a prévia em cache." : "Não foi possível atualizar agora.",
         show_alert: !unchanged,
       });
       if (!unchanged) throw error;
@@ -99,6 +103,7 @@ export function registerCallbackHandlers(bot: Bot): void {
   });
 
   bot.callbackQuery(/^delete:(.+)$/, async (ctx) => {
+    if (ctx.chat?.type === "private" && !isOwner(ctx.from.id)) return;
     if (!config.buttons.delete) {
       await ctx.answerCallbackQuery({ text: DISABLED });
       return;

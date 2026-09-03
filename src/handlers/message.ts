@@ -1,6 +1,6 @@
 import type { Bot } from "grammy";
 import { setTimeout as sleep } from "node:timers/promises";
-import { isAllowed } from "../access.js";
+import { isAllowed, isOwner } from "../access.js";
 import { config } from "../config.js";
 import { findPlatform } from "../platforms/index.js";
 import type { Platform, Resolved } from "../platforms/types.js";
@@ -74,20 +74,24 @@ async function resolveLinks(text: string): Promise<ResolvedLink[]> {
   });
 }
 
-// Regular groups and supergroups (topics included - a forum is still a
-// supergroup). Never private chats or channels: link-fixing is a group
-// feature, and channel posts arrive as channel_post updates anyway, which
-// this handler never sees - the check here is defense in depth.
+// Regular groups and supergroups (including topics). Private chats have
+// a separate owner-only gate; channels remain excluded, even for the owner.
 const GROUP_CHAT_TYPES = ["group", "supergroup"];
 
 export function registerMessageHandler(bot: Bot): void {
   bot.on("message", async (ctx) => {
-    if (!GROUP_CHAT_TYPES.includes(ctx.chat.type)) return;
-
     // Without a real user there's nobody to credit or to authorize the
     // buttons against, so anonymous admins are left alone rather than
     // attributed to a placeholder id.
     if (!ctx.from || ctx.from.is_bot) return;
+
+    // This gate is independent of RESTRICT_ACCESS and ALLOWED_CHAT_IDS:
+    // neither an open bot nor an allowlisted private chat grants DM access.
+    if (ctx.chat.type === "private") {
+      if (!isOwner(ctx.from.id)) return;
+    } else if (!GROUP_CHAT_TYPES.includes(ctx.chat.type)) {
+      return;
+    }
 
     // A link posted as the caption of a photo/video/document arrives in
     // .caption, not .text - filtering on "message:text" alone silently

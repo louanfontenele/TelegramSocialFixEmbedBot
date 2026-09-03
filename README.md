@@ -182,14 +182,22 @@ the link.
 
 ## Restricting access
 
-By default the bot responds in any chat it's added to. To lock it down to
+By default the bot responds in any group it's added to. To lock it down to
 specific groups (recommended, so randoms can't add it and spam it), set in
 `.env`:
 
 - `RESTRICT_ACCESS=true`
 - `ALLOWED_CHAT_IDS=` a comma-separated list of allowed chat ids
 - `OWNER_USER_ID=` your Telegram user id, always allowed regardless of chat
-  (handy for testing in a DM or another group)
+  restrictions in groups and the only user allowed to send links in DMs
+
+Private chats are **owner-only**, independently of `RESTRICT_ACCESS` and
+`ALLOWED_CHAT_IDS`. Set `OWNER_USER_ID` to your numeric Telegram user ID,
+restart the bot, and send it a supported link privately. Text messages and
+attachment captions use the same link processing, Original, Refresh and
+Delete buttons as groups. Other users get no private replies; if
+`OWNER_USER_ID` is unset, private link processing is disabled for everyone.
+This is a link-fixing bot; text without supported links is not a chat prompt.
 
 When a chat isn't allowed, the bot returns immediately without doing any
 link processing, and logs the chat id to the console so you can add it to
@@ -202,14 +210,38 @@ still set up a new group before allowlisting it.
 
 Channels are never allowed, unconditionally - not gated by
 `RESTRICT_ACCESS`, and with no owner exception. The bot posts a short
-notice (if it can) and leaves immediately. It only ever fixes links in
-regular groups and supergroups, topics included - a forum is still a
-supergroup as far as Telegram's API is concerned.
+notice (if it can) and leaves immediately. Besides the owner's private
+chat, it fixes links in regular groups and supergroups, topics included -
+a forum is still a supergroup as far as Telegram's API is concerned.
 
 To find a chat's id, send `/id` in it — the command only answers the
 `OWNER_USER_ID`, and works in any chat, including ones not yet allowlisted.
 The usual setup flow is: add the bot to your group, run `/id`, copy the id
 into `ALLOWED_CHAT_IDS`, set `RESTRICT_ACCESS=true`, and restart.
+
+## Refreshing links and Telegram preview caching
+
+The Refresh button reprocesses the original URL and edits the bot's reply.
+It can choose a different working backend, but it does **not** invalidate
+Telegram's preview cache. An unchanged link is reported as unchanged,
+not as proof that Telegram fetched fresh metadata.
+
+As checked on September 3, 2026, the documented
+[Bot API link-preview options](https://core.telegram.org/bots/api#linkpreviewoptions)
+select the URL and presentation, with no force-refresh/cache-purge option.
+The separate MTProto method
+[`messages.getWebPagePreview`](https://core.telegram.org/method/messages.getWebPagePreview)
+is user-only and does not document a force-refresh option either. It is
+not available through this bot's Bot API token.
+
+For a stale preview, the owner can manually submit the **fixed URL shown
+in the reply** to [@WebpageBot](https://t.me/WebpageBot) and use its update
+controls. That is separate from an automated Bot API integration. The
+[Telegram bot FAQ](https://core.telegram.org/bots/faq#why-doesn-39t-my-bot-see-messages-from-other-bots)
+also documents the restriction on bots receiving other bots' messages.
+Fetching the source from this server only checks the source; it does not
+clear Telegram's cache. No automatic WebpageBot messaging or user-account
+session is used by this project.
 
 ## Setup
 

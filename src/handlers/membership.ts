@@ -5,7 +5,8 @@ import { config } from "../config.js";
 const JOINED_STATUSES = ["member", "administrator", "restricted"];
 
 /**
- * This bot only operates in groups. It refuses channels unconditionally -
+ * Group membership policy (owner DMs are handled separately). The bot
+ * refuses channels unconditionally -
  * regardless of RESTRICT_ACCESS or who added it, including the owner - and,
  * when access is restricted, also refuses groups that aren't allowlisted
  * (with an exception letting the owner park it in a new group long enough

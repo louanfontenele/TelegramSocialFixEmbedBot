@@ -1,5 +1,9 @@
 import { config } from "./config.js";
 
+export function isOwner(userId: number): boolean {
+  return config.access.ownerId !== undefined && userId === config.access.ownerId;
+}
+
 /**
  * Gate checked before any URL processing, so disallowed chats don't cost
  * any work beyond this lookup. The owner always passes, regardless of
@@ -7,7 +11,7 @@ import { config } from "./config.js";
  */
 export function isAllowed(chatId: number, userId: number): boolean {
   if (!config.access.restrict) return true;
-  if (config.access.ownerId !== undefined && userId === config.access.ownerId) return true;
+  if (isOwner(userId)) return true;
   return isAllowedChat(chatId);
 }
 
