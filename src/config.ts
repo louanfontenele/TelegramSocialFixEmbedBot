@@ -106,22 +106,25 @@ export const config = {
       "fxig.seria.moe,eeinstagram.com,kkinstagram.com,n.zzinstagram.com,toinstagram.com",
     ),
     tiktok: optional("TIKTOK_FIX_DOMAIN", "tfxktok.com"),
-    // rxddit.com is fxreddit's own instance and is preferred, but it has
-    // been intermittently unable to reach Reddit; the rest are fallbacks.
-    reddit: domainList("REDDIT_FIX_DOMAINS", "rxddit.com,vxreddit.com,redditfix.com"),
-    // BiliFix serves rich metadata to Telegram and redirects people who click
-    // the fixed link back to the original Bilibili page.
-    bilibili: domainList("BILIBILI_FIX_DOMAINS", "vxbilibili.com"),
+    // Prefer Seria's hosted FixReddit instance, then fall back to the public
+    // domains maintained by the same and compatible projects.
+    reddit: domainList("REDDIT_FIX_DOMAINS", "fxreddit.seria.moe,rxddit.com,vxreddit.com,redditfix.com"),
+    // Seria's fxBilibili only serves Discord crawlers, so Telegram validation
+    // will reject it and continue to BiliFix, which redirects clicks to the
+    // original Bilibili page.
+    bilibili: domainList("BILIBILI_FIX_DOMAINS", "fxbilibili.seria.moe,vxbilibili.com"),
     // Empty string disables domain rewriting for YouTube.
     youtube: optional("YOUTUBE_FIX_DOMAIN", "koutube.com"),
-    // vxThreads and FixThreads are separate projects; either can be down
-    // independently of the other.
-    threads: domainList("THREADS_FIX_DOMAINS", "vxthreads.net,fixthreads.net"),
-    // fxfb.seria.moe's own maintainer calls it unreliable and recommends
-    // facebed; kept as a second attempt rather than dropped, since a probe
-    // that fails just costs one extra request. Empty disables reel/watch
+    // Prefer Seria's FixThreads instance, with two independent public domains
+    // behind it in the fallback race.
+    threads: domainList("THREADS_FIX_DOMAINS", "fixthreads.seria.moe,vxthreads.net,fixthreads.net"),
+    // Prefer Seria-hosted Facebook fixers. fxfb is Discord-only, so Telegram's
+    // probe normally advances to facebed.seria.moe. Empty disables reel/watch
     // fixing entirely, falling back to the tracking-cleaned Facebook link.
-    facebookReel: domainList("FACEBOOK_REEL_FIX_DOMAINS", "facebed.com,fxfb.seria.moe"),
+    facebookReel: domainList(
+      "FACEBOOK_REEL_FIX_DOMAINS",
+      "fxfb.seria.moe,facebed.seria.moe,facebed.com",
+    ),
     twitch: domainList("TWITCH_FIX_DOMAINS", "fxtwitch.seria.moe"),
     // fx.dissonant.dev has gone dark; kept as a second attempt in case it
     // comes back, since a failed probe just costs one extra request.

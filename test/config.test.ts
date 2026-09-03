@@ -13,8 +13,10 @@ function domains(overrides: Record<string, string> = {}) {
 test("Defaults preserve the requested Instagram/Reddit lists and FxEmbed", () => {
   const value = domains();
   assert.deepEqual(value.instagram, ["fxig.seria.moe", "eeinstagram.com", "kkinstagram.com", "n.zzinstagram.com", "toinstagram.com"]);
-  assert.deepEqual(value.reddit, ["rxddit.com", "vxreddit.com", "redditfix.com"]);
-  assert.deepEqual(value.bilibili, ["vxbilibili.com"]);
+  assert.deepEqual(value.reddit, ["fxreddit.seria.moe", "rxddit.com", "vxreddit.com", "redditfix.com"]);
+  assert.deepEqual(value.bilibili, ["fxbilibili.seria.moe", "vxbilibili.com"]);
+  assert.deepEqual(value.threads, ["fixthreads.seria.moe", "vxthreads.net", "fixthreads.net"]);
+  assert.deepEqual(value.facebookReel, ["fxfb.seria.moe", "facebed.seria.moe", "facebed.com"]);
   assert.equal(value.tiktok, "tfxktok.com");
   assert.equal(value.twitter, "fixupx.com");
   assert.equal(value.bluesky, "fxbsky.app");
