@@ -156,6 +156,16 @@ contained only links, a normal unquoted line says that the mentioned user
 sent multiple links. A single link keeps the singular wording and has no
 counter. The bot then deletes the source message.
 
+The source is deleted only when every recognized link produced a fully
+validated embed. An image embed must return non-empty `image/*` content. A
+Reel or clip that declares a direct video must return non-empty `video/*`
+content within Telegram's conservative remote-media size limit. This video is
+the complete media; a separate cover is optional because some working
+Instagram fixers repeat the MP4 URL in `og:image`. A title, an empty response,
+a mismatched media type or an oversized video is treated as failure. The bot
+then tries the configured fallback domains. If any link still fails, the
+source remains visible and the bot reports the failed fixer normally.
+
 Telegram limits message text to 4096 UTF-16 code units after entity parsing.
 This means emoji sequences can consume more than one unit: for example, `❤️`
 contains both a heart and a variation selector and counts as two. The bot

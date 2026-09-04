@@ -8,9 +8,15 @@ const originalFetch = globalThis.fetch;
 const seenUserAgents: string[] = [];
 
 before(() => {
-  globalThis.fetch = async (_input, init) => {
+  globalThis.fetch = async (input, init) => {
     const headers = new Headers(init?.headers);
     seenUserAgents.push(headers.get("user-agent") ?? "");
+    if (String(input).includes("example.com/cover.jpg")) {
+      return new Response(new Uint8Array([0xff, 0xd8, 0xff]), {
+        status: 200,
+        headers: { "content-type": "image/jpeg" },
+      });
+    }
     return new Response('<meta property="og:image" content="https://example.com/cover.jpg">', {
       status: 200,
       headers: { "content-type": "text/html" },
@@ -32,6 +38,6 @@ test("Bilibili videos use a Telegram-compatible fixer and discard share tracking
     original: "https://bilibili.com/video/BV1Xy4y1A7Ys?p=2",
     fixed: "https://vxbilibili.com/video/BV1Xy4y1A7Ys?p=2",
   });
-  assert.equal(seenUserAgents.length, 2);
+  assert.equal(seenUserAgents.length, 4);
   assert.ok(seenUserAgents.every((value) => value.startsWith("TelegramBot")));
 });

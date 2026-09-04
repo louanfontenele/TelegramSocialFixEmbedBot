@@ -366,7 +366,7 @@ test("Replace style repeats preserved text and numbering for every valid embed",
   assert.ok(h.calls[0].payload.text.includes("[2/2]"));
 });
 
-test("Multi-link counters exclude a fixer that failed embed validation", async () => {
+test("Any failed embed keeps a multi-link source message visible", async () => {
   config.messageStyle = "replace";
   config.verifyLinksBeforeSend = true;
   mock.restoreAll();
@@ -386,14 +386,15 @@ test("Multi-link counters exclude a fixer that failed embed validation", async (
 
   assert.deepEqual(
     h.calls.map((call) => call.method),
-    ["sendMessage", "sendMessage", "sendMessage", "deleteMessage"],
+    ["sendMessage", "sendMessage", "sendMessage"],
   );
-  assert.ok(h.calls[0].payload.text.includes("[1/2]"));
+  assert.ok(!h.calls[0].payload.text.includes("[1/2]"));
   assert.ok(h.calls[0].payload.text.includes(fixedUrl));
+  assert.equal(h.calls[0].payload.reply_parameters.message_id, 10);
   assert.match(h.calls[1].payload.text, /Nenhum serviço disponível/);
-  assert.ok(!h.calls[1].payload.text.includes("[2/3]"));
-  assert.ok(h.calls[2].payload.text.includes("[2/2]"));
+  assert.ok(!h.calls[2].payload.text.includes("[2/2]"));
   assert.ok(h.calls[2].payload.text.includes(thirdFixedUrl));
+  assert.equal(h.calls[2].payload.reply_parameters.message_id, 10);
 });
 
 test("Replace style keeps the source when the complete replacement exceeds 4096 UTF-16 units", async () => {

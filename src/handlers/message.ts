@@ -198,6 +198,7 @@ export function registerMessageHandler(bot: Bot): void {
     );
     const replaceOriginal = config.messageStyle === "replace" &&
       ctx.message.text !== undefined &&
+      validLinks.length === links.length &&
       replacementFits &&
       await canDeleteOriginal(bot, ctx.chat.id, ctx.chat.type);
 
