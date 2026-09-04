@@ -301,7 +301,7 @@ test("Replace style preserves surrounding text, publishes the embed, then delete
 
   assert.deepEqual(h.calls.map((call) => call.method), ["sendMessage", "deleteMessage"]);
   const sent = h.calls[0].payload;
-  assert.match(sent.text, /^<blockquote>👤 <a href="tg:\/\/user\?id=42">Tester<\/a>/);
+  assert.match(sent.text, /^<blockquote>👤 <a href="tg:\/\/user\?id=42">Tester<\/a>:\n/);
   assert.match(sent.text, /Ah @ravock assiste esse vídeo\.\n\nEu achei muito dahora!/);
   assert.ok(!sent.text.includes(originalUrl));
   assert.ok(sent.text.includes(fixedUrl));

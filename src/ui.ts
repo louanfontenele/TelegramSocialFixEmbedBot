@@ -56,7 +56,7 @@ function replacementPlainTextWithPosition(
 ): string {
   const multiple = position !== undefined && position.total > 1;
   const attribution = quotedText
-    ? `👤 ${sender.name}\n${quotedText}`
+    ? `👤 ${sender.name}:\n${quotedText}`
     : `👤 ${sender.name} enviou ${multiple ? "vários links" : "um link"}.`;
   const counter = multiple ? `\n[${position.index}/${position.total}]` : "";
   return `${attribution}${counter}\n\n${link.platformEmoji} ${link.fixedUrl}`;
@@ -70,7 +70,7 @@ export function buildReplacementMessageText(
 ): string {
   const multiple = position !== undefined && position.total > 1;
   const attribution = quotedText
-    ? `<blockquote>👤 ${mention(sender)}\n${escapeHtml(quotedText)}</blockquote>`
+    ? `<blockquote>👤 ${mention(sender)}:\n${escapeHtml(quotedText)}</blockquote>`
     : `👤 ${mention(sender)} enviou ${multiple ? "vários links" : "um link"}.`;
   const counter = multiple ? `\n[${position.index}/${position.total}]` : "";
   return `${attribution}${counter}\n\n${link.platformEmoji} ${escapeHtml(link.fixedUrl)}`;

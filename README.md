@@ -152,7 +152,8 @@ the link.
 
 `replace` (default) preserves the sender's text inside a Telegram blockquote,
 removes only links that received a valid corrected version, and places the
-first corrected link below it. If the source contains multiple valid links,
+sender's clickable name followed by a colon clearly labels the quoted speech.
+The first corrected link is placed below it. If the source contains multiple valid links,
 each is sent as a separate message so it gets its own preview. Every message
 repeats the preserved text and shows its position, such as `[1/10]`; only
 links that passed embed validation count toward that total. If the source
