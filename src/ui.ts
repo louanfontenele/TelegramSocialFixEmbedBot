@@ -112,6 +112,10 @@ export function buildValidationFailureText(
   );
 }
 
+export function buildReplyNotificationText(originalSender: Sender, replierName: string): string {
+  return `🔔 ${mention(originalSender)}, ${escapeHtml(replierName)} respondeu à sua mensagem.`;
+}
+
 export function buildKeyboard(id: string, link: ResolvedLink): InlineKeyboard {
   // The original link is always offered; the action buttons are opt-out.
   // The label spells out what the button does - "Original" alone left people

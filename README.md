@@ -101,6 +101,10 @@ left out as adult-content-oriented communities.
    the original text in a blockquote after removing successfully fixed URLs.
 4. Inline buttons let anyone open the original link, and let the original
    sender or group admins refresh the embed or delete that reply.
+5. If another member replies directly to a replacement message, the bot
+   replies to that member and mentions the original sender. This restores the
+   notification that would otherwise point only at the bot after the source
+   message was deleted. Replies written by the original sender are ignored.
 
 Set `VERIFY_LINKS_BEFORE_SEND=false` to disable this preflight check. A
 successful check proves that the service responded with preview metadata at
@@ -176,6 +180,11 @@ Replacement is also skipped for media captions, because deleting the source
 would delete the attached photo, video or document. In groups, the bot must be
 an administrator with **Delete messages** permission; if that permission is
 missing, the source remains and the bot uses ordinary replies.
+
+The author's clickable mention is stored in every replacement message. Reply
+notifications normally use the bot's in-memory message state, but can recover
+the author from that mention and the Original-link button after a restart or
+after the stored button state expires.
 
 ## Restricting access
 

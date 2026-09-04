@@ -111,6 +111,7 @@ function harness() {
   registerCallbackHandlers(bot);
   return {
     calls,
+    sentMessage() { return sent; },
     unchanged() { unchangedEdit = true; },
     rejectDelete() { rejectedDelete = true; },
     denyBotDeletePermission() { botCanDelete = false; },
@@ -447,4 +448,94 @@ test("Telegram length uses UTF-16 units for emoji sequences", () => {
   assert.equal(telegramTextLength("❤️"), 2);
   assert.equal(telegramTextLength("😀"), 2);
   assert.equal(telegramTextLength("a"), 1);
+});
+
+test("Replying to a replacement notifies the original sender", async () => {
+  config.messageStyle = "replace";
+  const h = harness();
+  await h.message(incoming(ownerId, "supergroup"));
+  const replacement = h.sentMessage();
+  assert.ok(replacement);
+
+  h.calls.length = 0;
+  await h.message({
+    message_id: 11,
+    date: 0,
+    chat: { id: -100, type: "supergroup", title: "Tests" },
+    from: { id: otherId, is_bot: false, first_name: "Rafael" },
+    text: "É legal mesmo!",
+    reply_to_message: replacement,
+  });
+
+  assert.deepEqual(h.calls.map((call) => call.method), ["sendMessage"]);
+  assert.match(h.calls[0].payload.text, /^🔔 <a href="tg:\/\/user\?id=42">Tester<\/a>, Rafael respondeu/);
+  assert.equal(h.calls[0].payload.reply_parameters.message_id, 11);
+  assert.equal(h.calls[0].payload.link_preview_options.is_disabled, true);
+});
+
+test("The original sender replying to their own replacement is not notified", async () => {
+  config.messageStyle = "replace";
+  const h = harness();
+  await h.message(incoming(ownerId, "supergroup"));
+  const replacement = h.sentMessage();
+  assert.ok(replacement);
+
+  h.calls.length = 0;
+  await h.message({
+    message_id: 11,
+    date: 0,
+    chat: { id: -100, type: "supergroup", title: "Tests" },
+    from: { id: ownerId, is_bot: false, first_name: "Tester" },
+    text: "Complementando...",
+    reply_to_message: replacement,
+  });
+  assert.deepEqual(h.calls, []);
+});
+
+test("Reply routing recovers the author from the bot message after state expires", async () => {
+  const h = harness();
+  const replacementText = "👤 Louan enviou um link.\n\n🐦 https://fixupx.com/example/status/12345/pt";
+  const oldReplacement: Message = {
+    message_id: 777,
+    date: 0,
+    chat: { id: -100, type: "supergroup", title: "Tests" },
+    from: botInfo,
+    text: replacementText,
+    entities: [{ type: "text_link", offset: 3, length: 5, url: "tg://user?id=42" }],
+    reply_markup: {
+      inline_keyboard: [[{ text: "🐦 Link Original (X / Twitter)", url: originalUrl }]],
+    },
+  };
+
+  await h.message({
+    message_id: 11,
+    date: 0,
+    chat: { id: -100, type: "supergroup", title: "Tests" },
+    from: { id: otherId, is_bot: false, first_name: "Rafael" },
+    text: "Ainda concordo.",
+    reply_to_message: oldReplacement,
+  });
+
+  assert.equal(h.calls.length, 1);
+  assert.match(h.calls[0].payload.text, /tg:\/\/user\?id=42/);
+  assert.match(h.calls[0].payload.text, /Rafael respondeu à sua mensagem/);
+});
+
+test("Replies to unrelated bot messages do not trigger author notifications", async () => {
+  const h = harness();
+  await h.message({
+    message_id: 11,
+    date: 0,
+    chat: { id: -100, type: "supergroup", title: "Tests" },
+    from: { id: otherId, is_bot: false, first_name: "Rafael" },
+    text: "Resposta normal.",
+    reply_to_message: {
+      message_id: 778,
+      date: 0,
+      chat: { id: -100, type: "supergroup", title: "Tests" },
+      from: botInfo,
+      text: "Mensagem comum do bot",
+    },
+  });
+  assert.deepEqual(h.calls, []);
 });

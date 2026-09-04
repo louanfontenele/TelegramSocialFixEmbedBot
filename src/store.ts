@@ -30,6 +30,11 @@ export interface StoredMessage {
 const MAX_ENTRIES = 10_000;
 
 const entries = new Map<string, StoredMessage>();
+const botMessageIds = new Map<string, string>();
+
+function botMessageKey(chatId: number, messageId: number): string {
+  return `${chatId}:${messageId}`;
+}
 
 export function createId(): string {
   return randomUUID();
@@ -40,10 +45,13 @@ export function saveMessage(id: string, data: Omit<StoredMessage, "createdAt">):
   while (entries.size >= MAX_ENTRIES) {
     const oldest = entries.keys().next();
     if (oldest.done) break;
+    const entry = entries.get(oldest.value);
+    if (entry) botMessageIds.delete(botMessageKey(entry.chatId, entry.botMessageId));
     entries.delete(oldest.value);
   }
 
   entries.set(id, { ...data, createdAt: Date.now() });
+  botMessageIds.set(botMessageKey(data.chatId, data.botMessageId), id);
 }
 
 export function getMessage(id: string): StoredMessage | undefined {
@@ -57,7 +65,16 @@ export function updateMessage(id: string, link: ResolvedLink): void {
   }
 }
 
+export function getMessageByBotMessage(chatId: number, botMessageId: number): StoredMessage | undefined {
+  const id = botMessageIds.get(botMessageKey(chatId, botMessageId));
+  return id ? entries.get(id) : undefined;
+}
+
 export function deleteMessage(id: string): void {
+  const entry = entries.get(id);
+  if (entry && botMessageIds.get(botMessageKey(entry.chatId, entry.botMessageId)) === id) {
+    botMessageIds.delete(botMessageKey(entry.chatId, entry.botMessageId));
+  }
   entries.delete(id);
 }
 
@@ -67,6 +84,9 @@ setInterval(() => {
   const cutoff = Date.now() - config.stateTtlMs;
   for (const [id, entry] of entries) {
     if (entry.createdAt < cutoff) {
+      if (botMessageIds.get(botMessageKey(entry.chatId, entry.botMessageId)) === id) {
+        botMessageIds.delete(botMessageKey(entry.chatId, entry.botMessageId));
+      }
       entries.delete(id);
     }
   }

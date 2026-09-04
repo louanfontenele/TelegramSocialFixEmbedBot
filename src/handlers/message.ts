@@ -1,14 +1,16 @@
 import type { Bot } from "grammy";
+import type { Message } from "grammy/types";
 import { setTimeout as sleep } from "node:timers/promises";
 import { isAllowed, isOwner } from "../access.js";
 import { config } from "../config.js";
 import { findPlatform } from "../platforms/index.js";
 import type { Platform, Resolved } from "../platforms/types.js";
 import { verifyResolvedLink } from "../platforms/verify.js";
-import { createId, saveMessage, type ResolvedLink } from "../store.js";
+import { createId, getMessageByBotMessage, saveMessage, type ResolvedLink } from "../store.js";
 import {
   buildKeyboard,
   buildMessageText,
+  buildReplyNotificationText,
   buildReplacementMessageText,
   buildValidationFailureText,
   replacementMessageLength,
@@ -153,6 +155,69 @@ async function canDeleteOriginal(bot: Bot, chatId: number, chatType: string): Pr
   }
 }
 
+function hasOriginalLinkButton(message: Message): boolean {
+  return message.reply_markup?.inline_keyboard.some((row) =>
+    row.some((button) => "url" in button && button.text.includes("Link Original")),
+  ) === true;
+}
+
+/** Recovers the original author from the text mention embedded in a bot
+ * replacement. This survives process restarts after the in-memory state is
+ * gone, while the Original-link button prevents unrelated bot messages from
+ * being interpreted as replacements. */
+function senderMentionedByBotMessage(message: Message): Sender | undefined {
+  if (!hasOriginalLinkButton(message)) return undefined;
+
+  const text = "text" in message ? message.text : "caption" in message ? message.caption : undefined;
+  const entities = "entities" in message
+    ? message.entities
+    : "caption_entities" in message
+      ? message.caption_entities
+      : undefined;
+  if (!text || !entities) return undefined;
+
+  for (const entity of entities) {
+    const name = text.slice(entity.offset, entity.offset + entity.length);
+    if (entity.type === "text_mention") {
+      return { id: entity.user.id, name };
+    }
+    if (entity.type === "text_link") {
+      const match = /^tg:\/\/user\?id=(\d+)$/.exec(entity.url);
+      const id = match ? Number(match[1]) : Number.NaN;
+      if (Number.isSafeInteger(id) && id > 0) return { id, name };
+    }
+  }
+  return undefined;
+}
+
+function originalSenderForReply(bot: Bot, chatId: number, message: Message): Sender | undefined {
+  const replied = message.reply_to_message;
+  if (!replied || replied.from?.id !== bot.botInfo.id) return undefined;
+
+  const stored = getMessageByBotMessage(chatId, replied.message_id);
+  if (stored) return { id: stored.senderId, name: stored.senderName };
+  return senderMentionedByBotMessage(replied);
+}
+
+async function notifyOriginalSender(
+  bot: Bot,
+  chatId: number,
+  replyToMessageId: number,
+  originalSender: Sender | undefined,
+  replier: Sender,
+): Promise<void> {
+  if (!originalSender || originalSender.id === replier.id) return;
+  try {
+    await bot.api.sendMessage(chatId, buildReplyNotificationText(originalSender, replier.name), {
+      parse_mode: "HTML",
+      reply_parameters: { message_id: replyToMessageId },
+      link_preview_options: { is_disabled: true },
+    });
+  } catch (error) {
+    console.error("Failed to notify the original sender about a reply:", error);
+  }
+}
+
 // Regular groups and supergroups (including topics). Private chats have
 // a separate owner-only gate; channels remain excluded, even for the owner.
 const GROUP_CHAT_TYPES = ["group", "supergroup"];
@@ -172,20 +237,28 @@ export function registerMessageHandler(bot: Bot): void {
       return;
     }
 
-    // A link posted as the caption of a photo/video/document arrives in
-    // .caption, not .text - filtering on "message:text" alone silently
-    // ignored every attachment with a link in its caption.
-    const text = ctx.message.text ?? ctx.message.caption;
-    if (!text) return;
-
     const sender: Sender = { id: ctx.from.id, name: ctx.from.first_name };
     if (!isAllowed(ctx.chat.id, sender.id)) {
       console.log(`Ignored message from disallowed chat ${ctx.chat.id} (user ${sender.id})`);
       return;
     }
 
+    const originalSender = originalSenderForReply(bot, ctx.chat.id, ctx.message);
+
+    // A link posted as the caption of a photo/video/document arrives in
+    // .caption, not .text - filtering on "message:text" alone silently
+    // ignored every attachment with a link in its caption.
+    const text = ctx.message.text ?? ctx.message.caption;
+    if (!text) {
+      await notifyOriginalSender(bot, ctx.chat.id, ctx.message.message_id, originalSender, sender);
+      return;
+    }
+
     const links = await resolveLinks(text);
-    if (links.length === 0) return;
+    if (links.length === 0) {
+      await notifyOriginalSender(bot, ctx.chat.id, ctx.message.message_id, originalSender, sender);
+      return;
+    }
 
     const validLinks = links.filter(
       (link): link is ResolvedLink & { sourceRanges: SourceRange[] } => !("failed" in link),
@@ -310,6 +383,13 @@ export function registerMessageHandler(bot: Bot): void {
         ...(entry.linkIndex !== undefined ? { linkIndex: entry.linkIndex } : {}),
         ...(entry.linkCount !== undefined ? { linkCount: entry.linkCount } : {}),
       });
+    }
+
+    const notificationTarget = originalDeleted
+      ? pendingState[0]?.botMessageId
+      : ctx.message.message_id;
+    if (notificationTarget !== undefined) {
+      await notifyOriginalSender(bot, ctx.chat.id, notificationTarget, originalSender, sender);
     }
   });
 }
