@@ -150,7 +150,9 @@ the link.
 removes only links that received a valid corrected version, and places the
 first corrected link below it. If the source contains multiple valid links,
 the remaining links are sent as separate messages so each gets its own
-preview. The bot then deletes the source message.
+preview. If the source contained only a link, the quote says that the
+mentioned user sent a link instead of showing an empty quote. The bot then
+deletes the source message.
 
 Telegram limits message text to 4096 UTF-16 code units after entity parsing.
 This means emoji sequences can consume more than one unit: for example, `❤️`

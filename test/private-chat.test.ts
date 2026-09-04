@@ -304,6 +304,19 @@ test("Replace style preserves surrounding text, publishes the embed, then delete
   assert.equal(h.calls[1].payload.message_id, 10);
 });
 
+test("Replace style describes a link-only source instead of producing an empty quote", async () => {
+  config.messageStyle = "replace";
+  const h = harness();
+  await h.message(incoming(ownerId));
+
+  assert.deepEqual(h.calls.map((call) => call.method), ["sendMessage", "deleteMessage"]);
+  assert.match(
+    h.calls[0].payload.text,
+    /^<blockquote>👤 <a href="tg:\/\/user\?id=42">Tester<\/a> enviou um link\.<\/blockquote>/,
+  );
+  assert.ok(h.calls[0].payload.text.includes(fixedUrl));
+});
+
 test("Replace style keeps the source when the complete replacement exceeds 4096 UTF-16 units", async () => {
   config.messageStyle = "replace";
   const h = harness();

@@ -44,12 +44,16 @@ export function telegramTextLength(text: string): number {
 }
 
 function replacementPlainText(sender: Sender, link: ResolvedLink, quotedText: string): string {
-  const quote = `👤 ${sender.name}${quotedText ? `\n${quotedText}` : ""}`;
+  const quote = quotedText
+    ? `👤 ${sender.name}\n${quotedText}`
+    : `👤 ${sender.name} enviou um link.`;
   return `${quote}\n\n${link.platformEmoji} ${link.fixedUrl}`;
 }
 
 export function buildReplacementMessageText(sender: Sender, link: ResolvedLink, quotedText: string): string {
-  const quote = `👤 ${mention(sender)}${quotedText ? `\n${escapeHtml(quotedText)}` : ""}`;
+  const quote = quotedText
+    ? `👤 ${mention(sender)}\n${escapeHtml(quotedText)}`
+    : `👤 ${mention(sender)} enviou um link.`;
   return `<blockquote>${quote}</blockquote>\n\n${link.platformEmoji} ${escapeHtml(link.fixedUrl)}`;
 }
 
