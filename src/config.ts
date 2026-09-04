@@ -134,6 +134,7 @@ export const config = {
     deviantart: domainList("DEVIANTART_FIX_DOMAINS", "fixdeviantart.com"),
   },
   stateTtlMs: positiveNumber("STATE_TTL_MINUTES", "1440") * 60 * 1000,
+  replyNotificationCooldownMs: positiveNumber("REPLY_NOTIFICATION_COOLDOWN_MINUTES", "10") * 60 * 1000,
   // fxtwitter/fixupx and fxbsky are both FxEmbed under the hood and support
   // appending /<lang> to show a machine translation alongside the original.
   // This option is intentionally limited to Twitter and Bluesky.

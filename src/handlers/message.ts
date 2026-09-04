@@ -6,7 +6,14 @@ import { config } from "../config.js";
 import { findPlatform } from "../platforms/index.js";
 import type { Platform, Resolved } from "../platforms/types.js";
 import { verifyResolvedLink } from "../platforms/verify.js";
-import { createId, getMessageByBotMessage, saveMessage, type ResolvedLink } from "../store.js";
+import {
+  claimReplyNotification,
+  createId,
+  getMessageByBotMessage,
+  releaseReplyNotification,
+  saveMessage,
+  type ResolvedLink,
+} from "../store.js";
 import {
   buildKeyboard,
   buildMessageText,
@@ -190,30 +197,39 @@ function senderMentionedByBotMessage(message: Message): Sender | undefined {
   return undefined;
 }
 
-function originalSenderForReply(bot: Bot, chatId: number, message: Message): Sender | undefined {
+interface ReplyRoute {
+  originalSender: Sender;
+  embedMessageId: number;
+}
+
+function originalSenderForReply(bot: Bot, chatId: number, message: Message): ReplyRoute | undefined {
   const replied = message.reply_to_message;
   if (!replied || replied.from?.id !== bot.botInfo.id) return undefined;
 
   const stored = getMessageByBotMessage(chatId, replied.message_id);
-  if (stored) return { id: stored.senderId, name: stored.senderName };
-  return senderMentionedByBotMessage(replied);
+  const originalSender = stored
+    ? { id: stored.senderId, name: stored.senderName }
+    : senderMentionedByBotMessage(replied);
+  return originalSender ? { originalSender, embedMessageId: replied.message_id } : undefined;
 }
 
 async function notifyOriginalSender(
   bot: Bot,
   chatId: number,
   replyToMessageId: number,
-  originalSender: Sender | undefined,
+  route: ReplyRoute | undefined,
   replier: Sender,
 ): Promise<void> {
-  if (!originalSender || originalSender.id === replier.id) return;
+  if (!route || route.originalSender.id === replier.id) return;
+  if (!claimReplyNotification(chatId, route.embedMessageId, replier.id)) return;
   try {
-    await bot.api.sendMessage(chatId, buildReplyNotificationText(originalSender, replier.name), {
+    await bot.api.sendMessage(chatId, buildReplyNotificationText(route.originalSender, replier.name), {
       parse_mode: "HTML",
       reply_parameters: { message_id: replyToMessageId },
       link_preview_options: { is_disabled: true },
     });
   } catch (error) {
+    releaseReplyNotification(chatId, route.embedMessageId, replier.id);
     console.error("Failed to notify the original sender about a reply:", error);
   }
 }
@@ -243,20 +259,20 @@ export function registerMessageHandler(bot: Bot): void {
       return;
     }
 
-    const originalSender = originalSenderForReply(bot, ctx.chat.id, ctx.message);
+    const replyRoute = originalSenderForReply(bot, ctx.chat.id, ctx.message);
 
     // A link posted as the caption of a photo/video/document arrives in
     // .caption, not .text - filtering on "message:text" alone silently
     // ignored every attachment with a link in its caption.
     const text = ctx.message.text ?? ctx.message.caption;
     if (!text) {
-      await notifyOriginalSender(bot, ctx.chat.id, ctx.message.message_id, originalSender, sender);
+      await notifyOriginalSender(bot, ctx.chat.id, ctx.message.message_id, replyRoute, sender);
       return;
     }
 
     const links = await resolveLinks(text);
     if (links.length === 0) {
-      await notifyOriginalSender(bot, ctx.chat.id, ctx.message.message_id, originalSender, sender);
+      await notifyOriginalSender(bot, ctx.chat.id, ctx.message.message_id, replyRoute, sender);
       return;
     }
 
@@ -389,7 +405,7 @@ export function registerMessageHandler(bot: Bot): void {
       ? pendingState[0]?.botMessageId
       : ctx.message.message_id;
     if (notificationTarget !== undefined) {
-      await notifyOriginalSender(bot, ctx.chat.id, notificationTarget, originalSender, sender);
+      await notifyOriginalSender(bot, ctx.chat.id, notificationTarget, replyRoute, sender);
     }
   });
 }

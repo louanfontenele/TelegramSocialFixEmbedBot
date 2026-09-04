@@ -471,6 +471,27 @@ test("Replying to a replacement notifies the original sender", async () => {
   assert.match(h.calls[0].payload.text, /^🔔 <a href="tg:\/\/user\?id=42">Tester<\/a>, Rafael respondeu/);
   assert.equal(h.calls[0].payload.reply_parameters.message_id, 11);
   assert.equal(h.calls[0].payload.link_preview_options.is_disabled, true);
+
+  await h.message({
+    message_id: 12,
+    date: 0,
+    chat: { id: -100, type: "supergroup", title: "Tests" },
+    from: { id: otherId, is_bot: false, first_name: "Rafael" },
+    text: "Outra resposta seguida.",
+    reply_to_message: replacement,
+  });
+  assert.equal(h.calls.length, 1, "the same replier must be rate-limited per embed");
+
+  await h.message({
+    message_id: 13,
+    date: 0,
+    chat: { id: -100, type: "supergroup", title: "Tests" },
+    from: { id: 100, is_bot: false, first_name: "Maria" },
+    text: "Resposta de outra pessoa.",
+    reply_to_message: replacement,
+  });
+  assert.equal(h.calls.length, 2, "a different replier gets an independent notification slot");
+  assert.match(h.calls[1].payload.text, /Maria respondeu à sua mensagem/);
 });
 
 test("The original sender replying to their own replacement is not notified", async () => {

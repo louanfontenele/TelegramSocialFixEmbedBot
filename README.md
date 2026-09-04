@@ -105,6 +105,8 @@ left out as adult-content-oriented communities.
    replies to that member and mentions the original sender. This restores the
    notification that would otherwise point only at the bot after the source
    message was deleted. Replies written by the original sender are ignored.
+   Repeated replies from the same person to the same embed produce at most one
+   author mention per `REPLY_NOTIFICATION_COOLDOWN_MINUTES` interval.
 
 Set `VERIFY_LINKS_BEFORE_SEND=false` to disable this preflight check. A
 successful check proves that the service responded with preview metadata at
