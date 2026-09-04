@@ -80,12 +80,12 @@ function languageCode(name: string, fallback: string): string {
   return raw;
 }
 
-export type MessageStyle = "compact" | "structured" | "quote";
+export type MessageStyle = "compact" | "structured" | "quote" | "replace";
 
-const MESSAGE_STYLES: MessageStyle[] = ["compact", "structured", "quote"];
+const MESSAGE_STYLES: MessageStyle[] = ["compact", "structured", "quote", "replace"];
 
 function messageStyle(): MessageStyle {
-  const value = optional("MESSAGE_STYLE", "compact") as MessageStyle;
+  const value = optional("MESSAGE_STYLE", "replace") as MessageStyle;
   if (!MESSAGE_STYLES.includes(value)) {
     throw new Error(`Invalid MESSAGE_STYLE "${value}". Expected one of: ${MESSAGE_STYLES.join(", ")}`);
   }

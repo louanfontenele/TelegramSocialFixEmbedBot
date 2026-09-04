@@ -14,6 +14,7 @@ const { config } = await import("../src/config.js");
 const { registerMessageHandler } = await import("../src/handlers/message.js");
 const { registerCallbackHandlers } = await import("../src/handlers/callbacks.js");
 const { deleteMessage, getMessage } = await import("../src/store.js");
+const { telegramTextLength } = await import("../src/ui.js");
 
 const ownerId = 42;
 const otherId = 99;
@@ -34,6 +35,7 @@ beforeEach(() => {
   config.buttons.refresh = true;
   config.buttons.delete = true;
   config.verifyLinksBeforeSend = false;
+  config.messageStyle = "compact";
   networkRequests = [];
   mock.method(globalThis, "fetch", async (input: unknown) => {
     networkRequests.push(String(input));
@@ -61,6 +63,8 @@ function harness() {
   const calls: { method: string; payload: any }[] = [];
   let sent: Message | undefined;
   let unchangedEdit = false;
+  let rejectedDelete = false;
+  let botCanDelete = true;
   bot.api.config.use(async (_previous, method, payload) => {
     calls.push({ method, payload });
     if (method === "sendMessage") {
@@ -78,6 +82,24 @@ function harness() {
       }, method, payload);
       return { ok: true, result: sent } as any;
     }
+    if (method === "getChatMember") {
+      return {
+        ok: true,
+        result: {
+          status: "administrator", user: botInfo, can_be_edited: false,
+          is_anonymous: false, can_manage_chat: true, can_delete_messages: botCanDelete,
+          can_manage_video_chats: false, can_restrict_members: false,
+          can_promote_members: false, can_change_info: false,
+          can_invite_users: true, can_post_stories: false,
+          can_edit_stories: false, can_delete_stories: false,
+        },
+      } as any;
+    }
+    if (method === "deleteMessage" && rejectedDelete) {
+      throw new GrammyError("delete failed", {
+        ok: false, error_code: 400, description: "Bad Request: message can't be deleted",
+      }, method, payload);
+    }
     assert.ok(["deleteMessage", "answerCallbackQuery"].includes(method), `Unexpected API method ${method}`);
     return { ok: true, result: true } as any;
   });
@@ -86,6 +108,8 @@ function harness() {
   return {
     calls,
     unchanged() { unchangedEdit = true; },
+    rejectDelete() { rejectedDelete = true; },
+    denyBotDeletePermission() { botCanDelete = false; },
     async message(message: Message) {
       await bot.handleUpdate({ update_id: 1, message } as Update);
     },
@@ -260,4 +284,74 @@ test("Restricted groups remain closed to unlisted users, with the owner exceptio
   await h.message(incoming(ownerId, "supergroup"));
   assert.equal(h.calls.length, 1);
   assert.equal(h.calls[0].method, "sendMessage");
+});
+
+test("Replace style preserves surrounding text, publishes the embed, then deletes the source", async () => {
+  config.messageStyle = "replace";
+  const h = harness();
+  await h.message({
+    ...incoming(ownerId),
+    text: `Ah @ravock assiste esse vídeo.\n\n${originalUrl}\n\nEu achei muito dahora!`,
+  });
+
+  assert.deepEqual(h.calls.map((call) => call.method), ["sendMessage", "deleteMessage"]);
+  const sent = h.calls[0].payload;
+  assert.match(sent.text, /^<blockquote>👤 <a href="tg:\/\/user\?id=42">Tester<\/a>/);
+  assert.match(sent.text, /Ah @ravock assiste esse vídeo\.\n\nEu achei muito dahora!/);
+  assert.ok(!sent.text.includes(originalUrl));
+  assert.ok(sent.text.includes(fixedUrl));
+  assert.equal(sent.reply_parameters, undefined);
+  assert.equal(h.calls[1].payload.message_id, 10);
+});
+
+test("Replace style keeps the source when the complete replacement exceeds 4096 UTF-16 units", async () => {
+  config.messageStyle = "replace";
+  const h = harness();
+  const prefix = "a".repeat(4096 - originalUrl.length - 1);
+  await h.message({ ...incoming(ownerId), text: `${prefix}\n${originalUrl}` });
+
+  assert.deepEqual(h.calls.map((call) => call.method), ["sendMessage"]);
+  assert.equal(h.calls[0].payload.reply_parameters.message_id, 10);
+  assert.ok(!h.calls[0].payload.text.includes(prefix));
+});
+
+test("Replace style never deletes an attachment just to replace its caption", async () => {
+  config.messageStyle = "replace";
+  const h = harness();
+  await h.message(incoming(ownerId, "private", true));
+
+  assert.deepEqual(h.calls.map((call) => call.method), ["sendMessage"]);
+  assert.equal(h.calls[0].payload.reply_parameters.message_id, 10);
+});
+
+test("A failed source deletion rolls the replacement back to an ordinary link reply", async () => {
+  config.messageStyle = "replace";
+  mock.method(console, "error", () => {});
+  const h = harness();
+  h.rejectDelete();
+  await h.message({ ...incoming(ownerId), text: `Veja isto:\n${originalUrl}` });
+
+  assert.deepEqual(h.calls.map((call) => call.method), ["sendMessage", "deleteMessage", "editMessageText"]);
+  assert.ok(h.calls[0].payload.text.includes("<blockquote>"));
+  assert.ok(!h.calls[2].payload.text.includes("<blockquote>"));
+  assert.ok(h.calls[2].payload.text.includes(fixedUrl));
+});
+
+test("Replace style checks group deletion rights before publishing a replacement", async () => {
+  config.messageStyle = "replace";
+  const allowed = harness();
+  await allowed.message({ ...incoming(otherId, "supergroup"), text: `Veja:\n${originalUrl}` });
+  assert.deepEqual(allowed.calls.map((call) => call.method), ["getChatMember", "sendMessage", "deleteMessage"]);
+
+  const denied = harness();
+  denied.denyBotDeletePermission();
+  await denied.message({ ...incoming(otherId, "supergroup"), text: `Veja:\n${originalUrl}` });
+  assert.deepEqual(denied.calls.map((call) => call.method), ["getChatMember", "sendMessage"]);
+  assert.equal(denied.calls[1].payload.reply_parameters.message_id, 10);
+});
+
+test("Telegram length uses UTF-16 units for emoji sequences", () => {
+  assert.equal(telegramTextLength("❤️"), 2);
+  assert.equal(telegramTextLength("😀"), 2);
+  assert.equal(telegramTextLength("a"), 1);
 });

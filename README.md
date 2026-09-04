@@ -95,9 +95,10 @@ left out as adult-content-oriented communities.
 2. Before replying, the bot requests each third-party fixer URL with
    Telegram's crawler identity and checks for non-empty Open Graph metadata.
    If validation fails, it sends a warning with only the original link.
-3. For each validated link, the bot sends a separate reply crediting the
+3. For each validated link, the bot sends a separate message crediting the
    sender. One message per link, since Telegram only renders a single link
-   preview per message.
+   preview per message. In `replace` mode, the first message also preserves
+   the original text in a blockquote after removing successfully fixed URLs.
 4. Inline buttons let anyone open the original link, and let the original
    sender or group admins refresh the embed or delete that reply.
 
@@ -125,7 +126,7 @@ Telegram's flood limits.
 `MESSAGE_STYLE` picks how replies are formatted. The sender is always a
 clickable mention, which works even for users without a `@username`.
 
-`compact` (default):
+`compact`:
 
 ```
 📸 Instagram · enviado por Louan
@@ -144,6 +145,23 @@ https://fxig.seria.moe/p/xyz
 
 `quote` — the same header inside a Telegram blockquote card, followed by
 the link.
+
+`replace` (default) preserves the sender's text inside a Telegram blockquote,
+removes only links that received a valid corrected version, and places the
+first corrected link below it. If the source contains multiple valid links,
+the remaining links are sent as separate messages so each gets its own
+preview. The bot then deletes the source message.
+
+Telegram limits message text to 4096 UTF-16 code units after entity parsing.
+This means emoji sequences can consume more than one unit: for example, `❤️`
+contains both a heart and a variation selector and counts as two. The bot
+measures the complete replacement before sending it. If it would exceed the
+limit, it leaves the source untouched and sends ordinary replies instead.
+
+Replacement is also skipped for media captions, because deleting the source
+would delete the attached photo, video or document. In groups, the bot must be
+an administrator with **Delete messages** permission; if that permission is
+missing, the source remains and the bot uses ordinary replies.
 
 ## Restricting access
 
@@ -220,6 +238,10 @@ npm run dev
 With privacy mode enabled (the default) a bot only receives commands and
 replies directed at it, so it would never see the links people post and
 would appear to do nothing in groups.
+
+To use `MESSAGE_STYLE=replace` in a group, also promote the bot to
+administrator and grant **Delete messages**. Telegram only permits an admin
+bot with that right to remove messages written by other group members.
 
 ## Production
 

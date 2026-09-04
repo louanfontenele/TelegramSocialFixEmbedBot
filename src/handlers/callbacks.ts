@@ -87,7 +87,7 @@ export function registerCallbackHandlers(bot: Bot): void {
 
     const sender = { id: entry.senderId, name: entry.senderName };
     try {
-      await ctx.editMessageText(buildMessageText(sender, link), {
+      await ctx.editMessageText(buildMessageText(sender, link, entry.quotedText), {
         parse_mode: "HTML",
         reply_markup: buildKeyboard(id, link),
         link_preview_options: { url: link.fixedUrl },

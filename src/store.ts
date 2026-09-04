@@ -14,6 +14,8 @@ export interface StoredMessage {
   senderId: number;
   senderName: string;
   link: ResolvedLink;
+  /** Text preserved in the blockquote when replace mode deleted the source. */
+  quotedText?: string;
   createdAt: number;
 }
 

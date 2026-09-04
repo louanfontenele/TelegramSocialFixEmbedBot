@@ -22,7 +22,7 @@ function mention(sender: Sender): string {
 // A raw "&" in a query string (e.g. Facebook's ?story_fbid=X&id=Y) is valid
 // in a URL but not in HTML text - Telegram's parse_mode=HTML expects it
 // escaped like any other text.
-const builders: Record<MessageStyle, (sender: Sender, link: ResolvedLink) => string> = {
+const builders: Record<Exclude<MessageStyle, "replace">, (sender: Sender, link: ResolvedLink) => string> = {
   compact: (sender, link) =>
     `${link.platformEmoji} <b>${escapeHtml(link.platformLabel)}</b> · enviado por ${mention(sender)}` +
     `\n\n${escapeHtml(link.fixedUrl)}`,
@@ -37,7 +37,32 @@ const builders: Record<MessageStyle, (sender: Sender, link: ResolvedLink) => str
     `\n\n${escapeHtml(link.fixedUrl)}`,
 };
 
-export function buildMessageText(sender: Sender, link: ResolvedLink): string {
+/** Telegram measures message/entity offsets in UTF-16 code units. JavaScript's
+ * string length uses the same unit, including variation selectors in emoji. */
+export function telegramTextLength(text: string): number {
+  return text.length;
+}
+
+function replacementPlainText(sender: Sender, link: ResolvedLink, quotedText: string): string {
+  const quote = `👤 ${sender.name}${quotedText ? `\n${quotedText}` : ""}`;
+  return `${quote}\n\n${link.platformEmoji} ${link.fixedUrl}`;
+}
+
+export function buildReplacementMessageText(sender: Sender, link: ResolvedLink, quotedText: string): string {
+  const quote = `👤 ${mention(sender)}${quotedText ? `\n${escapeHtml(quotedText)}` : ""}`;
+  return `<blockquote>${quote}</blockquote>\n\n${link.platformEmoji} ${escapeHtml(link.fixedUrl)}`;
+}
+
+export function replacementMessageLength(sender: Sender, link: ResolvedLink, quotedText: string): number {
+  return telegramTextLength(replacementPlainText(sender, link, quotedText));
+}
+
+export function buildMessageText(sender: Sender, link: ResolvedLink, quotedText?: string): string {
+  if (config.messageStyle === "replace") {
+    return quotedText === undefined
+      ? builders.compact(sender, link)
+      : buildReplacementMessageText(sender, link, quotedText);
+  }
   return builders[config.messageStyle](sender, link);
 }
 

@@ -6,9 +6,17 @@ import { findPlatform } from "../platforms/index.js";
 import type { Platform, Resolved } from "../platforms/types.js";
 import { verifyResolvedLink } from "../platforms/verify.js";
 import { createId, saveMessage, type ResolvedLink } from "../store.js";
-import { buildKeyboard, buildMessageText, buildValidationFailureText, type Sender } from "../ui.js";
+import {
+  buildKeyboard,
+  buildMessageText,
+  buildReplacementMessageText,
+  buildValidationFailureText,
+  replacementMessageLength,
+  type Sender,
+} from "../ui.js";
 
 const URL_REGEX = /https?:\/\/\S+/g;
+const TELEGRAM_MESSAGE_LIMIT = 4096;
 
 // URLs at the end of a sentence often pick up trailing punctuation, and
 // a URL inside parentheses picks up the closing one.
@@ -21,20 +29,30 @@ interface FailedLink {
   platformLabel: string;
   platformEmoji: string;
   originalUrl: string;
+  sourceRanges: SourceRange[];
 }
 
-type ProcessedLink = ResolvedLink | FailedLink;
+interface SourceRange {
+  start: number;
+  end: number;
+}
+
+type ProcessedLink = (ResolvedLink & { sourceRanges: SourceRange[] }) | FailedLink;
 
 async function resolveLinks(text: string): Promise<ProcessedLink[]> {
-  const seen = new Set<string>();
-  const candidates: { url: URL; platform: Platform }[] = [];
+  const candidates = new Map<string, { url: URL; platform: Platform; sourceRanges: SourceRange[] }>();
 
-  for (const match of text.match(URL_REGEX) ?? []) {
-    const rawUrl = trimUrl(match);
-    if (seen.has(rawUrl)) continue;
-    seen.add(rawUrl);
+  for (const match of text.matchAll(URL_REGEX)) {
+    const rawMatch = match[0];
+    const rawUrl = trimUrl(rawMatch);
+    const sourceRange = { start: match.index, end: match.index + rawUrl.length };
+    const existing = candidates.get(rawUrl);
+    if (existing) {
+      existing.sourceRanges.push(sourceRange);
+      continue;
+    }
 
-    if (candidates.length >= config.batching.maxLinksPerMessage) break;
+    if (candidates.size >= config.batching.maxLinksPerMessage) break;
 
     let url: URL;
     try {
@@ -44,13 +62,13 @@ async function resolveLinks(text: string): Promise<ProcessedLink[]> {
     }
 
     const platform = findPlatform(url);
-    if (platform) candidates.push({ url, platform });
+    if (platform) candidates.set(rawUrl, { url, platform, sourceRanges: [sourceRange] });
   }
 
   // Resolving in parallel: several of these make network calls, and in
   // series a handful of links would add up to a visibly slow reply.
   const resolved = await Promise.all(
-    candidates.map(async ({ url, platform }): Promise<ProcessedLink | null> => {
+    [...candidates.values()].map(async ({ url, platform, sourceRanges }): Promise<ProcessedLink | null> => {
       let result: Resolved | null;
       try {
         result = await platform.resolve(url);
@@ -71,6 +89,7 @@ async function resolveLinks(text: string): Promise<ProcessedLink[]> {
           platformLabel: platform.label,
           platformEmoji: platform.emoji,
           originalUrl: result.original,
+          sourceRanges,
         };
       }
 
@@ -79,6 +98,7 @@ async function resolveLinks(text: string): Promise<ProcessedLink[]> {
         platformEmoji: platform.emoji,
         originalUrl: result.original,
         fixedUrl: result.fixed,
+        sourceRanges,
       };
     }),
   );
@@ -86,12 +106,51 @@ async function resolveLinks(text: string): Promise<ProcessedLink[]> {
   // Two raw strings (http vs https, with vs without www) can resolve to
   // the exact same content - dedupe on the cleaned link so it isn't posted
   // twice.
-  const seenOriginal = new Set<string>();
-  return resolved.filter((link): link is ProcessedLink => {
-    if (!link || seenOriginal.has(link.originalUrl)) return false;
-    seenOriginal.add(link.originalUrl);
-    return true;
-  });
+  const unique = new Map<string, ProcessedLink>();
+  for (const link of resolved) {
+    if (!link) continue;
+    const existing = unique.get(link.originalUrl);
+    if (existing) {
+      if ("failed" in existing && !("failed" in link)) {
+        link.sourceRanges.push(...existing.sourceRanges);
+        unique.set(link.originalUrl, link);
+      } else {
+        existing.sourceRanges.push(...link.sourceRanges);
+      }
+    } else {
+      unique.set(link.originalUrl, link);
+    }
+  }
+  return [...unique.values()];
+}
+
+/** Removes only URLs for which a verified replacement will be published. */
+export function removeReplacedUrls(text: string, links: ProcessedLink[]): string {
+  const ranges = links
+    .filter((link): link is ResolvedLink & { sourceRanges: SourceRange[] } => !("failed" in link))
+    .flatMap((link) => link.sourceRanges)
+    .sort((a, b) => b.start - a.start);
+
+  let cleaned = text;
+  for (const range of ranges) cleaned = cleaned.slice(0, range.start) + cleaned.slice(range.end);
+
+  return cleaned
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+async function canDeleteOriginal(bot: Bot, chatId: number, chatType: string): Promise<boolean> {
+  if (chatType === "private") return true;
+  try {
+    const member = await bot.api.getChatMember(chatId, bot.botInfo.id);
+    return member.status === "creator" ||
+      (member.status === "administrator" && member.can_delete_messages === true);
+  } catch {
+    return false;
+  }
 }
 
 // Regular groups and supergroups (including topics). Private chats have
@@ -128,10 +187,30 @@ export function registerMessageHandler(bot: Bot): void {
     const links = await resolveLinks(text);
     if (links.length === 0) return;
 
+    const validLinks = links.filter(
+      (link): link is ResolvedLink & { sourceRanges: SourceRange[] } => !("failed" in link),
+    );
+    const quotedText = removeReplacedUrls(text, links);
+    const firstValid = validLinks[0];
+    const replacementFits = firstValid !== undefined &&
+      replacementMessageLength(sender, firstValid, quotedText) <= TELEGRAM_MESSAGE_LIMIT;
+    const replaceOriginal = config.messageStyle === "replace" &&
+      ctx.message.text !== undefined &&
+      replacementFits &&
+      await canDeleteOriginal(bot, ctx.chat.id, ctx.chat.type);
+
     // Telegram only renders one link preview per message, so each fixed link
     // gets its own reply. They go out in batches with a pause in between so a
     // link-heavy message doesn't trip Telegram's flood limits.
     const { size, cooldownMs } = config.batching;
+    let allSent = true;
+    let replacementSent = false;
+    const pendingState: Array<{
+      id: string;
+      botMessageId: number;
+      link: ResolvedLink;
+      quotedText?: string;
+    }> = [];
 
     for (let start = 0; start < links.length; start += size) {
       if (start > 0) await sleep(cooldownMs);
@@ -143,38 +222,85 @@ export function registerMessageHandler(bot: Bot): void {
               buildValidationFailureText(sender, link.platformLabel, link.platformEmoji, link.originalUrl),
               {
                 parse_mode: "HTML",
-                reply_parameters: { message_id: ctx.message.message_id },
+                ...(replaceOriginal ? {} : { reply_parameters: { message_id: ctx.message.message_id } }),
                 link_preview_options: { is_disabled: true },
               },
             );
           } catch (error) {
+            allSent = false;
             console.error(`Failed to report invalid fixer for ${link.originalUrl}:`, error);
           }
           continue;
         }
 
         const id = createId();
+        const includeQuote: boolean = replaceOriginal && !replacementSent;
 
         try {
-          const sent = await ctx.reply(buildMessageText(sender, link), {
+          const sent = await ctx.reply(
+            includeQuote
+              ? buildReplacementMessageText(sender, link, quotedText)
+              : buildMessageText(sender, link),
+            {
             parse_mode: "HTML",
-            reply_parameters: { message_id: ctx.message.message_id },
+            ...(replaceOriginal ? {} : { reply_parameters: { message_id: ctx.message.message_id } }),
             reply_markup: buildKeyboard(id, link),
             link_preview_options: { url: link.fixedUrl },
-          });
+            },
+          );
 
-          saveMessage(id, {
-            chatId: ctx.chat.id,
+          replacementSent ||= includeQuote;
+          pendingState.push({
+            id,
             botMessageId: sent.message_id,
-            senderId: sender.id,
-            senderName: sender.name,
             link,
+            ...(includeQuote ? { quotedText } : {}),
           });
         } catch (error) {
+          allSent = false;
           // One bad link shouldn't cost the sender the rest of their links.
           console.error(`Failed to reply with ${link.fixedUrl}:`, error);
         }
       }
+    }
+
+    let originalDeleted = false;
+    if (replaceOriginal && allSent && replacementSent) {
+      try {
+        await bot.api.deleteMessage(ctx.chat.id, ctx.message.message_id);
+        originalDeleted = true;
+      } catch (error) {
+        console.error("Failed to delete the original message after replacing it:", error);
+      }
+    }
+
+    // If deletion lost a permission race, turn the first response back into a
+    // normal reply body so the still-visible source is not duplicated in full.
+    if (replaceOriginal && !originalDeleted) {
+      const quoted = pendingState.find((entry) => entry.quotedText !== undefined);
+      if (quoted) {
+        try {
+          await bot.api.editMessageText(ctx.chat.id, quoted.botMessageId, buildMessageText(sender, quoted.link), {
+            parse_mode: "HTML",
+            reply_markup: buildKeyboard(quoted.id, quoted.link),
+            link_preview_options: { url: quoted.link.fixedUrl },
+          });
+          delete quoted.quotedText;
+        } catch (error) {
+          console.error("Failed to remove replacement quote after keeping the original message:", error);
+        }
+      }
+    }
+
+    for (const entry of pendingState) {
+      saveMessage(entry.id, {
+        chatId: ctx.chat.id,
+        botMessageId: entry.botMessageId,
+        senderId: sender.id,
+        senderName: sender.name,
+        link: entry.link,
+        ...(entry.quotedText !== undefined ? { quotedText: entry.quotedText } : {}),
+      });
     }
   });
 }
