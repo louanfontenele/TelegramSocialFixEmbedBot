@@ -20,6 +20,10 @@ const ownerId = 42;
 const otherId = 99;
 const originalUrl = "https://x.com/example/status/12345";
 const fixedUrl = "https://fixupx.com/example/status/12345/pt";
+const secondOriginalUrl = "https://x.com/example/status/67890";
+const secondFixedUrl = "https://fixupx.com/example/status/67890/pt";
+const thirdOriginalUrl = "https://x.com/example/status/24680";
+const thirdFixedUrl = "https://fixupx.com/example/status/24680/pt";
 const botInfo: UserFromGetMe = {
   id: 123456, is_bot: true, first_name: "Test", username: "test_bot",
   can_join_groups: true, can_read_all_group_messages: true, supports_inline_queries: false,
@@ -316,6 +320,80 @@ test("Replace style describes a link-only source without a quote", async () => {
   );
   assert.ok(!h.calls[0].payload.text.includes("<blockquote>"));
   assert.ok(h.calls[0].payload.text.includes(fixedUrl));
+});
+
+test("Replace style numbers only validated links and repeats a link-only attribution", async () => {
+  config.messageStyle = "replace";
+  const h = harness();
+  await h.message({ ...incoming(ownerId), text: `${originalUrl}\n${secondOriginalUrl}` });
+
+  assert.deepEqual(h.calls.map((call) => call.method), ["sendMessage", "sendMessage", "deleteMessage"]);
+  const first = h.calls[0].payload.text;
+  const second = h.calls[1].payload.text;
+  for (const message of [first, second]) {
+    assert.match(message, /^👤 <a href="tg:\/\/user\?id=42">Tester<\/a> enviou vários links\./);
+    assert.ok(!message.includes("<blockquote>"));
+  }
+  assert.ok(first.includes("[1/2]"));
+  assert.ok(first.includes(fixedUrl));
+  assert.ok(second.includes("[2/2]"));
+  assert.ok(second.includes(secondFixedUrl));
+});
+
+test("Replace style repeats preserved text and numbering for every valid embed", async () => {
+  config.messageStyle = "replace";
+  const h = harness();
+  const preserved = "Vejam estes dois vídeos!";
+  await h.message({
+    ...incoming(ownerId),
+    text: `${preserved}\n\n${originalUrl}\n${secondOriginalUrl}`,
+  });
+
+  const messages = h.calls.filter((call) => call.method === "sendMessage");
+  assert.equal(messages.length, 2);
+  for (const [index, message] of messages.entries()) {
+    assert.ok(message.payload.text.includes("<blockquote>"));
+    assert.ok(message.payload.text.includes(preserved));
+    assert.ok(message.payload.text.includes(`[${index + 1}/2]`));
+    assert.ok(!message.payload.text.includes(originalUrl));
+    assert.ok(!message.payload.text.includes(secondOriginalUrl));
+  }
+
+  h.calls.length = 0;
+  await h.click("refresh");
+  assert.equal(h.calls[0].method, "editMessageText");
+  assert.ok(h.calls[0].payload.text.includes(preserved));
+  assert.ok(h.calls[0].payload.text.includes("[2/2]"));
+});
+
+test("Multi-link counters exclude a fixer that failed embed validation", async () => {
+  config.messageStyle = "replace";
+  config.verifyLinksBeforeSend = true;
+  mock.restoreAll();
+  mock.method(globalThis, "fetch", async (input: unknown) => {
+    networkRequests.push(String(input));
+    return String(input).includes("67890")
+      ? new Response("Service unavailable", { status: 503 })
+      : new Response('<meta property="og:title" content="Valid preview">');
+  });
+  mock.method(console, "warn", () => {});
+
+  const h = harness();
+  await h.message({
+    ...incoming(ownerId),
+    text: `${originalUrl}\n${secondOriginalUrl}\n${thirdOriginalUrl}`,
+  });
+
+  assert.deepEqual(
+    h.calls.map((call) => call.method),
+    ["sendMessage", "sendMessage", "sendMessage", "deleteMessage"],
+  );
+  assert.ok(h.calls[0].payload.text.includes("[1/2]"));
+  assert.ok(h.calls[0].payload.text.includes(fixedUrl));
+  assert.match(h.calls[1].payload.text, /Nenhum serviço disponível/);
+  assert.ok(!h.calls[1].payload.text.includes("[2/3]"));
+  assert.ok(h.calls[2].payload.text.includes("[2/2]"));
+  assert.ok(h.calls[2].payload.text.includes(thirdFixedUrl));
 });
 
 test("Replace style keeps the source when the complete replacement exceeds 4096 UTF-16 units", async () => {

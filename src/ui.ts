@@ -43,29 +43,58 @@ export function telegramTextLength(text: string): number {
   return text.length;
 }
 
-function replacementPlainText(sender: Sender, link: ResolvedLink, quotedText: string): string {
+export interface LinkPosition {
+  index: number;
+  total: number;
+}
+
+function replacementPlainTextWithPosition(
+  sender: Sender,
+  link: ResolvedLink,
+  quotedText: string,
+  position?: LinkPosition,
+): string {
+  const multiple = position !== undefined && position.total > 1;
   const attribution = quotedText
     ? `👤 ${sender.name}\n${quotedText}`
-    : `👤 ${sender.name} enviou um link.`;
-  return `${attribution}\n\n${link.platformEmoji} ${link.fixedUrl}`;
+    : `👤 ${sender.name} enviou ${multiple ? "vários links" : "um link"}.`;
+  const counter = multiple ? `\n[${position.index}/${position.total}]` : "";
+  return `${attribution}${counter}\n\n${link.platformEmoji} ${link.fixedUrl}`;
 }
 
-export function buildReplacementMessageText(sender: Sender, link: ResolvedLink, quotedText: string): string {
+export function buildReplacementMessageText(
+  sender: Sender,
+  link: ResolvedLink,
+  quotedText: string,
+  position?: LinkPosition,
+): string {
+  const multiple = position !== undefined && position.total > 1;
   const attribution = quotedText
     ? `<blockquote>👤 ${mention(sender)}\n${escapeHtml(quotedText)}</blockquote>`
-    : `👤 ${mention(sender)} enviou um link.`;
-  return `${attribution}\n\n${link.platformEmoji} ${escapeHtml(link.fixedUrl)}`;
+    : `👤 ${mention(sender)} enviou ${multiple ? "vários links" : "um link"}.`;
+  const counter = multiple ? `\n[${position.index}/${position.total}]` : "";
+  return `${attribution}${counter}\n\n${link.platformEmoji} ${escapeHtml(link.fixedUrl)}`;
 }
 
-export function replacementMessageLength(sender: Sender, link: ResolvedLink, quotedText: string): number {
-  return telegramTextLength(replacementPlainText(sender, link, quotedText));
+export function replacementMessageLength(
+  sender: Sender,
+  link: ResolvedLink,
+  quotedText: string,
+  position?: LinkPosition,
+): number {
+  return telegramTextLength(replacementPlainTextWithPosition(sender, link, quotedText, position));
 }
 
-export function buildMessageText(sender: Sender, link: ResolvedLink, quotedText?: string): string {
+export function buildMessageText(
+  sender: Sender,
+  link: ResolvedLink,
+  quotedText?: string,
+  position?: LinkPosition,
+): string {
   if (config.messageStyle === "replace") {
     return quotedText === undefined
       ? builders.compact(sender, link)
-      : buildReplacementMessageText(sender, link, quotedText);
+      : buildReplacementMessageText(sender, link, quotedText, position);
   }
   return builders[config.messageStyle](sender, link);
 }

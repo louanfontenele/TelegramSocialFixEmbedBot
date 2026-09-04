@@ -149,9 +149,12 @@ the link.
 `replace` (default) preserves the sender's text inside a Telegram blockquote,
 removes only links that received a valid corrected version, and places the
 first corrected link below it. If the source contains multiple valid links,
-the remaining links are sent as separate messages so each gets its own
-preview. If the source contained only a link, a normal unquoted line says
-that the mentioned user sent a link. The bot then deletes the source message.
+each is sent as a separate message so it gets its own preview. Every message
+repeats the preserved text and shows its position, such as `[1/10]`; only
+links that passed embed validation count toward that total. If the source
+contained only links, a normal unquoted line says that the mentioned user
+sent multiple links. A single link keeps the singular wording and has no
+counter. The bot then deletes the source message.
 
 Telegram limits message text to 4096 UTF-16 code units after entity parsing.
 This means emoji sequences can consume more than one unit: for example, `❤️`

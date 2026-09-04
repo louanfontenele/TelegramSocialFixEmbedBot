@@ -16,6 +16,9 @@ export interface StoredMessage {
   link: ResolvedLink;
   /** Text preserved in the blockquote when replace mode deleted the source. */
   quotedText?: string;
+  /** One-based position among the validated links from the same source. */
+  linkIndex?: number;
+  linkCount?: number;
   createdAt: number;
 }
 

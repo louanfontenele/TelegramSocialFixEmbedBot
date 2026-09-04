@@ -191,9 +191,11 @@ export function registerMessageHandler(bot: Bot): void {
       (link): link is ResolvedLink & { sourceRanges: SourceRange[] } => !("failed" in link),
     );
     const quotedText = removeReplacedUrls(text, links);
-    const firstValid = validLinks[0];
-    const replacementFits = firstValid !== undefined &&
-      replacementMessageLength(sender, firstValid, quotedText) <= TELEGRAM_MESSAGE_LIMIT;
+    const linkCount = validLinks.length;
+    const replacementFits = linkCount > 0 && validLinks.every((link, index) =>
+      replacementMessageLength(sender, link, quotedText, { index: index + 1, total: linkCount }) <=
+        TELEGRAM_MESSAGE_LIMIT,
+    );
     const replaceOriginal = config.messageStyle === "replace" &&
       ctx.message.text !== undefined &&
       replacementFits &&
@@ -204,12 +206,14 @@ export function registerMessageHandler(bot: Bot): void {
     // link-heavy message doesn't trip Telegram's flood limits.
     const { size, cooldownMs } = config.batching;
     let allSent = true;
-    let replacementSent = false;
+    let replacementsSent = 0;
     const pendingState: Array<{
       id: string;
       botMessageId: number;
       link: ResolvedLink;
       quotedText?: string;
+      linkIndex?: number;
+      linkCount?: number;
     }> = [];
 
     for (let start = 0; start < links.length; start += size) {
@@ -234,12 +238,13 @@ export function registerMessageHandler(bot: Bot): void {
         }
 
         const id = createId();
-        const includeQuote: boolean = replaceOriginal && !replacementSent;
+        const linkIndex = validLinks.indexOf(link) + 1;
+        const position = { index: linkIndex, total: linkCount };
 
         try {
           const sent = await ctx.reply(
-            includeQuote
-              ? buildReplacementMessageText(sender, link, quotedText)
+            replaceOriginal
+              ? buildReplacementMessageText(sender, link, quotedText, position)
               : buildMessageText(sender, link),
             {
             parse_mode: "HTML",
@@ -249,12 +254,12 @@ export function registerMessageHandler(bot: Bot): void {
             },
           );
 
-          replacementSent ||= includeQuote;
+          if (replaceOriginal) replacementsSent++;
           pendingState.push({
             id,
             botMessageId: sent.message_id,
             link,
-            ...(includeQuote ? { quotedText } : {}),
+            ...(replaceOriginal ? { quotedText, linkIndex, linkCount } : {}),
           });
         } catch (error) {
           allSent = false;
@@ -265,7 +270,7 @@ export function registerMessageHandler(bot: Bot): void {
     }
 
     let originalDeleted = false;
-    if (replaceOriginal && allSent && replacementSent) {
+    if (replaceOriginal && allSent && replacementsSent === linkCount) {
       try {
         await bot.api.deleteMessage(ctx.chat.id, ctx.message.message_id);
         originalDeleted = true;
@@ -274,11 +279,10 @@ export function registerMessageHandler(bot: Bot): void {
       }
     }
 
-    // If deletion lost a permission race, turn the first response back into a
+    // If deletion lost a permission race, turn every replacement back into a
     // normal reply body so the still-visible source is not duplicated in full.
     if (replaceOriginal && !originalDeleted) {
-      const quoted = pendingState.find((entry) => entry.quotedText !== undefined);
-      if (quoted) {
+      for (const quoted of pendingState.filter((entry) => entry.quotedText !== undefined)) {
         try {
           await bot.api.editMessageText(ctx.chat.id, quoted.botMessageId, buildMessageText(sender, quoted.link), {
             parse_mode: "HTML",
@@ -286,6 +290,8 @@ export function registerMessageHandler(bot: Bot): void {
             link_preview_options: { url: quoted.link.fixedUrl },
           });
           delete quoted.quotedText;
+          delete quoted.linkIndex;
+          delete quoted.linkCount;
         } catch (error) {
           console.error("Failed to remove replacement quote after keeping the original message:", error);
         }
@@ -300,6 +306,8 @@ export function registerMessageHandler(bot: Bot): void {
         senderName: sender.name,
         link: entry.link,
         ...(entry.quotedText !== undefined ? { quotedText: entry.quotedText } : {}),
+        ...(entry.linkIndex !== undefined ? { linkIndex: entry.linkIndex } : {}),
+        ...(entry.linkCount !== undefined ? { linkCount: entry.linkCount } : {}),
       });
     }
   });

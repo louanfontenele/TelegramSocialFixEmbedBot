@@ -87,7 +87,10 @@ export function registerCallbackHandlers(bot: Bot): void {
 
     const sender = { id: entry.senderId, name: entry.senderName };
     try {
-      await ctx.editMessageText(buildMessageText(sender, link, entry.quotedText), {
+      const position = entry.linkIndex !== undefined && entry.linkCount !== undefined
+        ? { index: entry.linkIndex, total: entry.linkCount }
+        : undefined;
+      await ctx.editMessageText(buildMessageText(sender, link, entry.quotedText, position), {
         parse_mode: "HTML",
         reply_markup: buildKeyboard(id, link),
         link_preview_options: { url: link.fixedUrl },
