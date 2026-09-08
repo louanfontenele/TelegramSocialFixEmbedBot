@@ -309,6 +309,67 @@ test("Replace style preserves surrounding text, publishes the embed, then delete
   assert.equal(h.calls[1].payload.message_id, 10);
 });
 
+test("A username mention is kept active by rendering mentioned text outside blockquote", async () => {
+  config.messageStyle = "replace";
+  const h = harness();
+  const prefix = "Caso sério: @Ravock";
+  await h.message({
+    ...incoming(ownerId),
+    text: `${prefix}\n\n${originalUrl}`,
+    entities: [{ type: "mention", offset: prefix.indexOf("@Ravock"), length: "@Ravock".length }],
+  });
+
+  assert.deepEqual(h.calls.map((call) => call.method), ["sendMessage", "deleteMessage"]);
+  const sent = h.calls[0].payload.text;
+  assert.ok(!sent.includes("<blockquote>"));
+  assert.ok(sent.includes("Caso sério: @Ravock"));
+  assert.ok(!sent.includes(originalUrl));
+  assert.ok(sent.includes(fixedUrl));
+
+  h.calls.length = 0;
+  await h.click("refresh");
+  assert.equal(h.calls[0].method, "editMessageText");
+  assert.ok(!h.calls[0].payload.text.includes("<blockquote>"));
+  assert.ok(h.calls[0].payload.text.includes("Caso sério: @Ravock"));
+});
+
+test("An ID-based mention is reconstructed as a clickable Telegram mention", async () => {
+  config.messageStyle = "replace";
+  const h = harness();
+  const prefix = "Caso sério: Rafael";
+  await h.message({
+    ...incoming(ownerId),
+    text: `${prefix}\n\n${originalUrl}`,
+    entities: [{
+      type: "text_mention",
+      offset: prefix.indexOf("Rafael"),
+      length: "Rafael".length,
+      user: { id: otherId, is_bot: false, first_name: "Rafael" },
+    }],
+  });
+
+  const sent = h.calls[0].payload.text;
+  assert.ok(!sent.includes("<blockquote>"));
+  assert.ok(sent.includes('<a href="tg://user?id=99">Rafael</a>'));
+});
+
+test("Only the first of multiple embeds carries the active mention outside quote", async () => {
+  config.messageStyle = "replace";
+  const h = harness();
+  const prefix = "@Ravock veja estes links";
+  await h.message({
+    ...incoming(ownerId),
+    text: `${prefix}\n${originalUrl}\n${secondOriginalUrl}`,
+    entities: [{ type: "mention", offset: 0, length: "@Ravock".length }],
+  });
+
+  const messages = h.calls.filter((call) => call.method === "sendMessage");
+  assert.equal(messages.length, 2);
+  assert.ok(!messages[0].payload.text.includes("<blockquote>"));
+  assert.ok(messages[0].payload.text.includes("@Ravock"));
+  assert.ok(messages[1].payload.text.includes("<blockquote>"));
+});
+
 test("Replace style describes a link-only source without a quote", async () => {
   config.messageStyle = "replace";
   const h = harness();

@@ -7,7 +7,7 @@ export interface Sender {
   name: string;
 }
 
-function escapeHtml(text: string): string {
+export function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
@@ -67,9 +67,12 @@ export function buildReplacementMessageText(
   link: ResolvedLink,
   quotedText: string,
   position?: LinkPosition,
+  activeMentionHtml?: string,
 ): string {
   const multiple = position !== undefined && position.total > 1;
-  const attribution = quotedText
+  const attribution = activeMentionHtml !== undefined
+    ? `👤 ${mention(sender)}:\n${activeMentionHtml}`
+    : quotedText
     ? `<blockquote>👤 ${mention(sender)}:\n${escapeHtml(quotedText)}</blockquote>`
     : `👤 ${mention(sender)} enviou ${multiple ? "vários links" : "um link"}.`;
   const counter = multiple ? `\n[${position.index}/${position.total}]` : "";
@@ -90,11 +93,12 @@ export function buildMessageText(
   link: ResolvedLink,
   quotedText?: string,
   position?: LinkPosition,
+  activeMentionHtml?: string,
 ): string {
   if (config.messageStyle === "replace") {
     return quotedText === undefined
       ? builders.compact(sender, link)
-      : buildReplacementMessageText(sender, link, quotedText, position);
+      : buildReplacementMessageText(sender, link, quotedText, position, activeMentionHtml);
   }
   return builders[config.messageStyle](sender, link);
 }

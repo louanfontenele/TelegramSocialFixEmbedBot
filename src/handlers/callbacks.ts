@@ -90,11 +90,14 @@ export function registerCallbackHandlers(bot: Bot): void {
       const position = entry.linkIndex !== undefined && entry.linkCount !== undefined
         ? { index: entry.linkIndex, total: entry.linkCount }
         : undefined;
-      await ctx.editMessageText(buildMessageText(sender, link, entry.quotedText, position), {
+      await ctx.editMessageText(
+        buildMessageText(sender, link, entry.quotedText, position, entry.activeMentionHtml),
+        {
         parse_mode: "HTML",
         reply_markup: buildKeyboard(id, link),
         link_preview_options: { url: link.fixedUrl },
-      });
+        },
+      );
       await ctx.answerCallbackQuery({ text: "Link reprocessado." });
     } catch (error) {
       // Telegram rejects an edit that produces identical content, which is

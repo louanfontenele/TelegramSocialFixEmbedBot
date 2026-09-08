@@ -1,5 +1,5 @@
 import type { Bot } from "grammy";
-import type { Message } from "grammy/types";
+import type { Message, MessageEntity } from "grammy/types";
 import { setTimeout as sleep } from "node:timers/promises";
 import { isAllowed, isOwner } from "../access.js";
 import { config } from "../config.js";
@@ -20,6 +20,7 @@ import {
   buildReplyNotificationText,
   buildReplacementMessageText,
   buildValidationFailureText,
+  escapeHtml,
   replacementMessageLength,
   type Sender,
 } from "../ui.js";
@@ -47,6 +48,12 @@ interface SourceRange {
 }
 
 type ProcessedLink = (ResolvedLink & { sourceRanges: SourceRange[] }) | FailedLink;
+
+function successfulSourceRanges(links: ProcessedLink[]): SourceRange[] {
+  return links
+    .filter((link): link is ResolvedLink & { sourceRanges: SourceRange[] } => !("failed" in link))
+    .flatMap((link) => link.sourceRanges);
+}
 
 async function resolveLinks(text: string): Promise<ProcessedLink[]> {
   const candidates = new Map<string, { url: URL; platform: Platform; sourceRanges: SourceRange[] }>();
@@ -135,15 +142,63 @@ async function resolveLinks(text: string): Promise<ProcessedLink[]> {
 
 /** Removes only URLs for which a verified replacement will be published. */
 export function removeReplacedUrls(text: string, links: ProcessedLink[]): string {
-  const ranges = links
-    .filter((link): link is ResolvedLink & { sourceRanges: SourceRange[] } => !("failed" in link))
-    .flatMap((link) => link.sourceRanges)
-    .sort((a, b) => b.start - a.start);
+  const ranges = successfulSourceRanges(links).sort((a, b) => b.start - a.start);
 
   let cleaned = text;
   for (const range of ranges) cleaned = cleaned.slice(0, range.start) + cleaned.slice(range.end);
 
   return cleaned
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** Rebuilds source text as HTML while preserving mention entities and
+ * removing only successfully replaced URLs. It is rendered outside the
+ * blockquote so Telegram can deliver mention notifications reliably. */
+function buildActiveMentionHtml(
+  text: string,
+  links: ProcessedLink[],
+  entities: MessageEntity[] | undefined,
+): string | undefined {
+  const removals = successfulSourceRanges(links);
+  const mentions = (entities ?? []).filter(
+    (entity) => (entity.type === "mention" || entity.type === "text_mention") &&
+      !removals.some((range) => entity.offset < range.end && entity.offset + entity.length > range.start),
+  );
+  if (mentions.length === 0) return undefined;
+
+  const events: Array<
+    | ({ kind: "remove" } & SourceRange)
+    | { kind: "mention"; start: number; end: number; entity: MessageEntity }
+  > = [
+    ...removals.map((range) => ({ kind: "remove" as const, ...range })),
+    ...mentions.map((entity) => ({
+      kind: "mention" as const,
+      start: entity.offset,
+      end: entity.offset + entity.length,
+      entity,
+    })),
+  ].sort((a, b) => a.start - b.start || (a.kind === "remove" ? -1 : 1));
+
+  let cursor = 0;
+  let html = "";
+  for (const event of events) {
+    if (event.start < cursor) continue;
+    html += escapeHtml(text.slice(cursor, event.start));
+    if (event.kind === "mention") {
+      const label = escapeHtml(text.slice(event.start, event.end));
+      html += event.entity.type === "text_mention"
+        ? `<a href="tg://user?id=${event.entity.user.id}">${label}</a>`
+        : label;
+    }
+    cursor = event.end;
+  }
+  html += escapeHtml(text.slice(cursor));
+
+  return html
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n[ \t]+/g, "\n")
     .replace(/[ \t]{2,}/g, " ")
@@ -280,6 +335,7 @@ export function registerMessageHandler(bot: Bot): void {
       (link): link is ResolvedLink & { sourceRanges: SourceRange[] } => !("failed" in link),
     );
     const quotedText = removeReplacedUrls(text, links);
+    const activeMentionHtml = buildActiveMentionHtml(text, links, ctx.message.entities);
     const linkCount = validLinks.length;
     const replacementFits = linkCount > 0 && validLinks.every((link, index) =>
       replacementMessageLength(sender, link, quotedText, { index: index + 1, total: linkCount }) <=
@@ -304,6 +360,7 @@ export function registerMessageHandler(bot: Bot): void {
       quotedText?: string;
       linkIndex?: number;
       linkCount?: number;
+      activeMentionHtml?: string;
     }> = [];
 
     for (let start = 0; start < links.length; start += size) {
@@ -330,11 +387,12 @@ export function registerMessageHandler(bot: Bot): void {
         const id = createId();
         const linkIndex = validLinks.indexOf(link) + 1;
         const position = { index: linkIndex, total: linkCount };
+        const activeMentionHtmlForMessage = linkIndex === 1 ? activeMentionHtml : undefined;
 
         try {
           const sent = await ctx.reply(
             replaceOriginal
-              ? buildReplacementMessageText(sender, link, quotedText, position)
+              ? buildReplacementMessageText(sender, link, quotedText, position, activeMentionHtmlForMessage)
               : buildMessageText(sender, link),
             {
             parse_mode: "HTML",
@@ -349,7 +407,9 @@ export function registerMessageHandler(bot: Bot): void {
             id,
             botMessageId: sent.message_id,
             link,
-            ...(replaceOriginal ? { quotedText, linkIndex, linkCount } : {}),
+            ...(replaceOriginal
+              ? { quotedText, linkIndex, linkCount, ...(activeMentionHtmlForMessage ? { activeMentionHtml } : {}) }
+              : {}),
           });
         } catch (error) {
           allSent = false;
@@ -382,6 +442,7 @@ export function registerMessageHandler(bot: Bot): void {
           delete quoted.quotedText;
           delete quoted.linkIndex;
           delete quoted.linkCount;
+          delete quoted.activeMentionHtml;
         } catch (error) {
           console.error("Failed to remove replacement quote after keeping the original message:", error);
         }
@@ -398,6 +459,7 @@ export function registerMessageHandler(bot: Bot): void {
         ...(entry.quotedText !== undefined ? { quotedText: entry.quotedText } : {}),
         ...(entry.linkIndex !== undefined ? { linkIndex: entry.linkIndex } : {}),
         ...(entry.linkCount !== undefined ? { linkCount: entry.linkCount } : {}),
+        ...(entry.activeMentionHtml !== undefined ? { activeMentionHtml: entry.activeMentionHtml } : {}),
       });
     }
 

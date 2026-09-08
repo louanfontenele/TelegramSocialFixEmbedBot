@@ -189,6 +189,19 @@ notifications normally use the bot's in-memory message state, but can recover
 the author from that mention and the Original-link button after a restart or
 after the stored button state expires.
 
+Telegram clients do not reliably notify users for mentions rendered inside a
+blockquote. When the source text contains `@username` or an ID-based Telegram
+mention, the first replacement renders the attributed text without a
+blockquote and reconstructs the original mention entity. This keeps the ping
+active without repeating it across every preview in a multi-link message.
+
+If the sender's preserved text mentions another user, the first replacement
+is rendered as attributed plain text instead of a blockquote. Telegram does
+not reliably notify mentions from inside quotation blocks. Plain `@username`
+mentions and ID-based mentions of users without usernames are preserved, so
+the mentioned person is notified once. With multiple embeds, later messages
+keep the blockquote and do not repeat the active mention.
+
 ## Restricting access
 
 By default the bot responds in any group it's added to. To lock it down to
