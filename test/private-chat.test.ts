@@ -13,7 +13,7 @@ process.env.TRANSLATE_LANGUAGE = "pt";
 const { config } = await import("../src/config.js");
 const { registerMessageHandler } = await import("../src/handlers/message.js");
 const { registerCallbackHandlers } = await import("../src/handlers/callbacks.js");
-const { deleteMessage, getMessage } = await import("../src/store.js");
+const { deleteMessage, getMessage, releaseDeletePermissionAlert } = await import("../src/store.js");
 const { telegramTextLength } = await import("../src/ui.js");
 
 const ownerId = 42;
@@ -48,6 +48,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   for (const id of savedIds.splice(0)) deleteMessage(id);
+  releaseDeletePermissionAlert(-100);
   mock.restoreAll();
 });
 
@@ -504,11 +505,19 @@ test("A non-deletable topic message keeps the configured replacement style", asy
     text: originalUrl,
   });
 
-  assert.deepEqual(h.calls.map((call) => call.method), ["getChatMember", "sendMessage", "deleteMessage"]);
+  assert.deepEqual(
+    h.calls.map((call) => call.method),
+    ["getChatMember", "sendMessage", "deleteMessage", "sendMessage"],
+  );
   assert.equal(h.calls[1].payload.message_thread_id, 321);
   assert.equal(h.calls[1].payload.reply_parameters, undefined);
   assert.match(h.calls[1].payload.text, /enviou um link/);
   assert.ok(!h.calls[1].payload.text.includes("X \/ Twitter · enviado por"));
+  assert.equal(h.calls[3].payload.chat_id, ownerId);
+  assert.match(h.calls[3].payload.text, /<b>Grupo:<\/b> Tests/);
+  assert.match(h.calls[3].payload.text, /<b>ID do grupo:<\/b> <code>-100<\/code>/);
+  assert.match(h.calls[3].payload.text, /<b>ID do tópico:<\/b> <code>321<\/code>/);
+  assert.match(h.calls[3].payload.text, /<b>Apagar mensagens<\/b>/);
 });
 
 test("A topic without delete permission still follows MESSAGE_STYLE=replace", async () => {
@@ -522,11 +531,12 @@ test("A topic without delete permission still follows MESSAGE_STYLE=replace", as
     text: originalUrl,
   });
 
-  assert.deepEqual(h.calls.map((call) => call.method), ["getChatMember", "sendMessage"]);
+  assert.deepEqual(h.calls.map((call) => call.method), ["getChatMember", "sendMessage", "sendMessage"]);
   assert.equal(h.calls[1].payload.message_thread_id, 321);
   assert.equal(h.calls[1].payload.reply_parameters, undefined);
   assert.match(h.calls[1].payload.text, /enviou um link/);
   assert.ok(!h.calls[1].payload.text.includes("X \/ Twitter · enviado por"));
+  assert.equal(h.calls[2].payload.chat_id, ownerId);
 });
 
 test("Replace style checks group deletion rights before publishing a replacement", async () => {
@@ -538,8 +548,9 @@ test("Replace style checks group deletion rights before publishing a replacement
   const denied = harness();
   denied.denyBotDeletePermission();
   await denied.message({ ...incoming(otherId, "supergroup"), text: `Veja:\n${originalUrl}` });
-  assert.deepEqual(denied.calls.map((call) => call.method), ["getChatMember", "sendMessage"]);
+  assert.deepEqual(denied.calls.map((call) => call.method), ["getChatMember", "sendMessage", "sendMessage"]);
   assert.equal(denied.calls[1].payload.reply_parameters.message_id, 10);
+  assert.equal(denied.calls[2].payload.chat_id, ownerId);
 });
 
 test("Replace style stays inside a forum topic even without the topic boolean", async () => {

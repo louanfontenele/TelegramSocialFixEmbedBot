@@ -244,6 +244,10 @@ uses the configured `MESSAGE_STYLE` rather than changing the response to the
 compact style.
 The same applies when the bot does not have `can_delete_messages`: deletion is
 skipped, but presentation inside the topic continues to follow `MESSAGE_STYLE`.
+When `OWNER_USER_ID` is configured, the bot also sends that owner a private
+warning containing the group name, group ID, topic ID when applicable, and the
+exact administrator permission to enable. Repeated warnings from the same group
+are limited by `DELETE_PERMISSION_ALERT_COOLDOWN_MINUTES` (60 minutes by default).
 
 To find a chat's id, send `/id` in it — the command only answers the
 `OWNER_USER_ID`, and works in any chat, including ones not yet allowlisted.

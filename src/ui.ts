@@ -120,6 +120,23 @@ export function buildReplyNotificationText(originalSender: Sender, replierName: 
   return `🔔 ${mention(originalSender)}, ${escapeHtml(replierName)} respondeu à sua mensagem.`;
 }
 
+export function buildDeletePermissionAlertText(
+  chatTitle: string,
+  chatId: number,
+  messageThreadId?: number,
+): string {
+  const topic = messageThreadId === undefined
+    ? ""
+    : `\n<b>ID do tópico:</b> <code>${messageThreadId}</code>`;
+  return (
+    `⚠️ <b>Não consegui apagar uma mensagem original</b>\n\n` +
+    `<b>Grupo:</b> ${escapeHtml(chatTitle)}\n` +
+    `<b>ID do grupo:</b> <code>${chatId}</code>${topic}\n\n` +
+    `Para o <code>MESSAGE_STYLE=replace</code> funcionar completamente, ` +
+    `promova o bot a administrador e habilite a permissão <b>Apagar mensagens</b>.`
+  );
+}
+
 export function buildKeyboard(id: string, link: ResolvedLink): InlineKeyboard {
   // The original link is always offered; the action buttons are opt-out.
   // The label spells out what the button does - "Original" alone left people

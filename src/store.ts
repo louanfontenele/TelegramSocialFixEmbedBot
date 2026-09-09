@@ -34,6 +34,7 @@ const MAX_ENTRIES = 10_000;
 const entries = new Map<string, StoredMessage>();
 const botMessageIds = new Map<string, string>();
 const replyNotificationExpirations = new Map<string, number>();
+const deletePermissionAlertExpirations = new Map<number, number>();
 
 function botMessageKey(chatId: number, messageId: number): string {
   return `${chatId}:${messageId}`;
@@ -102,6 +103,25 @@ export function releaseReplyNotification(chatId: number, botMessageId: number, r
   replyNotificationExpirations.delete(replyNotificationKey(chatId, botMessageId, replierId));
 }
 
+/** Limits missing-delete-permission alerts to one private notice per group. */
+export function claimDeletePermissionAlert(chatId: number, now = Date.now()): boolean {
+  const expiration = deletePermissionAlertExpirations.get(chatId) ?? 0;
+  if (expiration > now) return false;
+
+  while (deletePermissionAlertExpirations.size >= MAX_ENTRIES) {
+    const oldest = deletePermissionAlertExpirations.keys().next();
+    if (oldest.done) break;
+    deletePermissionAlertExpirations.delete(oldest.value);
+  }
+  deletePermissionAlertExpirations.delete(chatId);
+  deletePermissionAlertExpirations.set(chatId, now + config.deletePermissionAlertCooldownMs);
+  return true;
+}
+
+export function releaseDeletePermissionAlert(chatId: number): void {
+  deletePermissionAlertExpirations.delete(chatId);
+}
+
 export function deleteMessage(id: string): void {
   const entry = entries.get(id);
   if (entry && botMessageIds.get(botMessageKey(entry.chatId, entry.botMessageId)) === id) {
@@ -125,5 +145,8 @@ setInterval(() => {
   }
   for (const [key, expiration] of replyNotificationExpirations) {
     if (expiration <= now) replyNotificationExpirations.delete(key);
+  }
+  for (const [chatId, expiration] of deletePermissionAlertExpirations) {
+    if (expiration <= now) deletePermissionAlertExpirations.delete(chatId);
   }
 }, 60 * 60 * 1000).unref();

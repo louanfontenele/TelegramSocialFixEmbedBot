@@ -8,14 +8,17 @@ import type { Platform, Resolved } from "../platforms/types.js";
 import { verifyResolvedLink } from "../platforms/verify.js";
 import {
   claimReplyNotification,
+  claimDeletePermissionAlert,
   createId,
   getMessageByBotMessage,
   releaseReplyNotification,
+  releaseDeletePermissionAlert,
   saveMessage,
   type ResolvedLink,
 } from "../store.js";
 import {
   buildKeyboard,
+  buildDeletePermissionAlertText,
   buildMessageText,
   buildReplyNotificationText,
   buildReplacementMessageText,
@@ -217,6 +220,26 @@ async function canDeleteOriginal(bot: Bot, chatId: number, chatType: string): Pr
   }
 }
 
+async function notifyOwnerAboutDeleteFailure(
+  bot: Bot,
+  chatId: number,
+  chatTitle: string,
+  messageThreadId?: number,
+): Promise<void> {
+  const ownerId = config.access.ownerId;
+  if (ownerId === undefined || !claimDeletePermissionAlert(chatId)) return;
+  try {
+    await bot.api.sendMessage(
+      ownerId,
+      buildDeletePermissionAlertText(chatTitle, chatId, messageThreadId),
+      { parse_mode: "HTML", link_preview_options: { is_disabled: true } },
+    );
+  } catch (error) {
+    releaseDeletePermissionAlert(chatId);
+    console.error("Failed to notify the owner about missing delete permission:", error);
+  }
+}
+
 function hasOriginalLinkButton(message: Message): boolean {
   return message.reply_markup?.inline_keyboard.some((row) =>
     row.some((button) => "url" in button && button.text.includes("Link Original")),
@@ -371,6 +394,7 @@ export function registerMessageHandler(bot: Bot): void {
     const canDeleteSource = replacementIsValid &&
       await canDeleteOriginal(bot, ctx.chat.id, ctx.chat.type);
     const replaceOriginal = replacementIsValid && canDeleteSource;
+    let deleteFailure = replacementIsValid && !canDeleteSource && ctx.chat.type !== "private";
     // MESSAGE_STYLE controls presentation independently from Telegram's
     // deletion permission. Inside topics, keep replace formatting even when
     // the source cannot be removed; otherwise the same .env would render two
@@ -457,6 +481,7 @@ export function registerMessageHandler(bot: Bot): void {
         await bot.api.deleteMessage(ctx.chat.id, ctx.message.message_id);
         originalDeleted = true;
       } catch (error) {
+        deleteFailure = true;
         console.error("Failed to delete the original message after replacing it:", error);
       }
     }
@@ -509,6 +534,14 @@ export function registerMessageHandler(bot: Bot): void {
         notificationTarget,
         replyRoute,
         sender,
+        ctx.message.message_thread_id,
+      );
+    }
+    if (deleteFailure && ctx.chat.type !== "private") {
+      await notifyOwnerAboutDeleteFailure(
+        bot,
+        ctx.chat.id,
+        ctx.chat.title,
         ctx.message.message_thread_id,
       );
     }
