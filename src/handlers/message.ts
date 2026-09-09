@@ -455,7 +455,13 @@ export function registerMessageHandler(bot: Bot): void {
 
     // If deletion lost a permission race, turn every replacement back into a
     // normal reply body so the still-visible source is not duplicated in full.
-    if (replaceOriginal && !originalDeleted) {
+    // A thread root is also the anchor Telegram uses to keep replies inside
+    // that thread. Telegram may refuse to delete it, and its client may show
+    // the anchor above every message even when no reply_parameters were sent.
+    // Keep the selected replacement style in that special case instead of
+    // unexpectedly reverting to compact mode.
+    const isThreadRoot = ctx.message.message_thread_id === ctx.message.message_id;
+    if (replaceOriginal && !originalDeleted && !isThreadRoot) {
       for (const quoted of pendingState.filter((entry) => entry.quotedText !== undefined)) {
         try {
           await bot.api.editMessageText(ctx.chat.id, quoted.botMessageId, buildMessageText(sender, quoted.link), {
