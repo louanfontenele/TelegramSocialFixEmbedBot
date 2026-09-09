@@ -505,6 +505,20 @@ test("Replace style checks group deletion rights before publishing a replacement
   assert.equal(denied.calls[1].payload.reply_parameters.message_id, 10);
 });
 
+test("Replace style stays inside a forum topic even without the topic boolean", async () => {
+  config.messageStyle = "replace";
+  const h = harness();
+  await h.message({
+    ...incoming(otherId, "supergroup"),
+    message_thread_id: 321,
+    text: `Veja:\n${originalUrl}`,
+  });
+
+  assert.deepEqual(h.calls.map((call) => call.method), ["getChatMember", "sendMessage", "deleteMessage"]);
+  assert.equal(h.calls[1].payload.message_thread_id, 321);
+  assert.equal(h.calls[1].payload.reply_parameters, undefined);
+});
+
 test("Telegram length uses UTF-16 units for emoji sequences", () => {
   assert.equal(telegramTextLength("❤️"), 2);
   assert.equal(telegramTextLength("😀"), 2);
@@ -553,6 +567,34 @@ test("Replying to a replacement notifies the original sender", async () => {
   });
   assert.equal(h.calls.length, 2, "a different replier gets an independent notification slot");
   assert.match(h.calls[1].payload.text, /Maria respondeu à sua mensagem/);
+});
+
+test("Reply notification stays inside its forum topic", async () => {
+  config.messageStyle = "replace";
+  const h = harness();
+  await h.message({
+    ...incoming(ownerId, "supergroup"),
+    message_thread_id: 321,
+    is_topic_message: true,
+  });
+  const replacement = h.sentMessage();
+  assert.ok(replacement);
+
+  h.calls.length = 0;
+  await h.message({
+    message_id: 11,
+    message_thread_id: 321,
+    is_topic_message: true,
+    date: 0,
+    chat: { id: -100, type: "supergroup", title: "Tests" },
+    from: { id: 101, is_bot: false, first_name: "Tópico" },
+    text: "Resposta no tópico.",
+    reply_to_message: replacement,
+  });
+
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls[0].payload.message_thread_id, 321);
+  assert.equal(h.calls[0].payload.reply_parameters.message_id, 11);
 });
 
 test("The original sender replying to their own replacement is not notified", async () => {

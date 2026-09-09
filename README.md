@@ -235,6 +235,9 @@ Channels are never allowed, unconditionally - not gated by
 notice (if it can) and leaves immediately. Besides the owner's private
 chat, it fixes links in regular groups and supergroups, topics included -
 a forum is still a supergroup as far as Telegram's API is concerned.
+Every response, replacement, and reply notification explicitly preserves the
+incoming `message_thread_id`, so the same configured message style is used in
+every forum topic instead of falling back to the general chat.
 
 To find a chat's id, send `/id` in it — the command only answers the
 `OWNER_USER_ID`, and works in any chat, including ones not yet allowlisted.

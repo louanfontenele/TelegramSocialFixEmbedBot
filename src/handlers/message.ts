@@ -257,6 +257,12 @@ interface ReplyRoute {
   embedMessageId: number;
 }
 
+function messageThreadOptions(message: Message): { message_thread_id: number } | Record<string, never> {
+  return message.message_thread_id !== undefined
+    ? { message_thread_id: message.message_thread_id }
+    : {};
+}
+
 function originalSenderForReply(bot: Bot, chatId: number, message: Message): ReplyRoute | undefined {
   const replied = message.reply_to_message;
   if (!replied || replied.from?.id !== bot.botInfo.id) return undefined;
@@ -274,12 +280,14 @@ async function notifyOriginalSender(
   replyToMessageId: number,
   route: ReplyRoute | undefined,
   replier: Sender,
+  messageThreadId?: number,
 ): Promise<void> {
   if (!route || route.originalSender.id === replier.id) return;
   if (!claimReplyNotification(chatId, route.embedMessageId, replier.id)) return;
   try {
     await bot.api.sendMessage(chatId, buildReplyNotificationText(route.originalSender, replier.name), {
       parse_mode: "HTML",
+      ...(messageThreadId !== undefined ? { message_thread_id: messageThreadId } : {}),
       reply_parameters: { message_id: replyToMessageId },
       link_preview_options: { is_disabled: true },
     });
@@ -321,13 +329,27 @@ export function registerMessageHandler(bot: Bot): void {
     // ignored every attachment with a link in its caption.
     const text = ctx.message.text ?? ctx.message.caption;
     if (!text) {
-      await notifyOriginalSender(bot, ctx.chat.id, ctx.message.message_id, replyRoute, sender);
+      await notifyOriginalSender(
+        bot,
+        ctx.chat.id,
+        ctx.message.message_id,
+        replyRoute,
+        sender,
+        ctx.message.message_thread_id,
+      );
       return;
     }
 
     const links = await resolveLinks(text);
     if (links.length === 0) {
-      await notifyOriginalSender(bot, ctx.chat.id, ctx.message.message_id, replyRoute, sender);
+      await notifyOriginalSender(
+        bot,
+        ctx.chat.id,
+        ctx.message.message_id,
+        replyRoute,
+        sender,
+        ctx.message.message_thread_id,
+      );
       return;
     }
 
@@ -373,6 +395,7 @@ export function registerMessageHandler(bot: Bot): void {
               buildValidationFailureText(sender, link.platformLabel, link.platformEmoji, link.originalUrl),
               {
                 parse_mode: "HTML",
+                ...messageThreadOptions(ctx.message),
                 ...(replaceOriginal ? {} : { reply_parameters: { message_id: ctx.message.message_id } }),
                 link_preview_options: { is_disabled: true },
               },
@@ -396,6 +419,7 @@ export function registerMessageHandler(bot: Bot): void {
               : buildMessageText(sender, link),
             {
             parse_mode: "HTML",
+            ...messageThreadOptions(ctx.message),
             ...(replaceOriginal ? {} : { reply_parameters: { message_id: ctx.message.message_id } }),
             reply_markup: buildKeyboard(id, link),
             link_preview_options: { url: link.fixedUrl },
@@ -467,7 +491,14 @@ export function registerMessageHandler(bot: Bot): void {
       ? pendingState[0]?.botMessageId
       : ctx.message.message_id;
     if (notificationTarget !== undefined) {
-      await notifyOriginalSender(bot, ctx.chat.id, notificationTarget, replyRoute, sender);
+      await notifyOriginalSender(
+        bot,
+        ctx.chat.id,
+        notificationTarget,
+        replyRoute,
+        sender,
+        ctx.message.message_thread_id,
+      );
     }
   });
 }
