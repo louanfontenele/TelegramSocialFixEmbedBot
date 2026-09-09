@@ -511,6 +511,24 @@ test("A non-deletable topic message keeps the configured replacement style", asy
   assert.ok(!h.calls[1].payload.text.includes("X \/ Twitter · enviado por"));
 });
 
+test("A topic without delete permission still follows MESSAGE_STYLE=replace", async () => {
+  config.messageStyle = "replace";
+  const h = harness();
+  h.denyBotDeletePermission();
+  await h.message({
+    ...incoming(ownerId, "supergroup"),
+    message_thread_id: 321,
+    is_topic_message: true,
+    text: originalUrl,
+  });
+
+  assert.deepEqual(h.calls.map((call) => call.method), ["getChatMember", "sendMessage"]);
+  assert.equal(h.calls[1].payload.message_thread_id, 321);
+  assert.equal(h.calls[1].payload.reply_parameters, undefined);
+  assert.match(h.calls[1].payload.text, /enviou um link/);
+  assert.ok(!h.calls[1].payload.text.includes("X \/ Twitter · enviado por"));
+});
+
 test("Replace style checks group deletion rights before publishing a replacement", async () => {
   config.messageStyle = "replace";
   const allowed = harness();

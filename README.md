@@ -242,6 +242,8 @@ If Telegram refuses to delete a source inside a topic, it keeps that source
 visible and may render the thread anchor above the bot message. The bot still
 uses the configured `MESSAGE_STYLE` rather than changing the response to the
 compact style.
+The same applies when the bot does not have `can_delete_messages`: deletion is
+skipped, but presentation inside the topic continues to follow `MESSAGE_STYLE`.
 
 To find a chat's id, send `/id` in it — the command only answers the
 `OWNER_USER_ID`, and works in any chat, including ones not yet allowlisted.

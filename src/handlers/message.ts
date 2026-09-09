@@ -363,11 +363,19 @@ export function registerMessageHandler(bot: Bot): void {
       replacementMessageLength(sender, link, quotedText, { index: index + 1, total: linkCount }) <=
         TELEGRAM_MESSAGE_LIMIT,
     );
-    const replaceOriginal = config.messageStyle === "replace" &&
+    const replacementIsValid = config.messageStyle === "replace" &&
       ctx.message.text !== undefined &&
       validLinks.length === links.length &&
-      replacementFits &&
+      replacementFits;
+    const isThreadMessage = ctx.message.message_thread_id !== undefined;
+    const canDeleteSource = replacementIsValid &&
       await canDeleteOriginal(bot, ctx.chat.id, ctx.chat.type);
+    const replaceOriginal = replacementIsValid && canDeleteSource;
+    // MESSAGE_STYLE controls presentation independently from Telegram's
+    // deletion permission. Inside topics, keep replace formatting even when
+    // the source cannot be removed; otherwise the same .env would render two
+    // different styles in the same chat.
+    const useReplacementStyle = replacementIsValid && (replaceOriginal || isThreadMessage);
 
     // Telegram only renders one link preview per message, so each fixed link
     // gets its own reply. They go out in batches with a pause in between so a
@@ -396,7 +404,7 @@ export function registerMessageHandler(bot: Bot): void {
               {
                 parse_mode: "HTML",
                 ...messageThreadOptions(ctx.message),
-                ...(replaceOriginal ? {} : { reply_parameters: { message_id: ctx.message.message_id } }),
+                ...(useReplacementStyle ? {} : { reply_parameters: { message_id: ctx.message.message_id } }),
                 link_preview_options: { is_disabled: true },
               },
             );
@@ -414,13 +422,13 @@ export function registerMessageHandler(bot: Bot): void {
 
         try {
           const sent = await ctx.reply(
-            replaceOriginal
+            useReplacementStyle
               ? buildReplacementMessageText(sender, link, quotedText, position, activeMentionHtmlForMessage)
               : buildMessageText(sender, link),
             {
             parse_mode: "HTML",
             ...messageThreadOptions(ctx.message),
-            ...(replaceOriginal ? {} : { reply_parameters: { message_id: ctx.message.message_id } }),
+            ...(useReplacementStyle ? {} : { reply_parameters: { message_id: ctx.message.message_id } }),
             reply_markup: buildKeyboard(id, link),
             link_preview_options: { url: link.fixedUrl },
             },
@@ -431,7 +439,7 @@ export function registerMessageHandler(bot: Bot): void {
             id,
             botMessageId: sent.message_id,
             link,
-            ...(replaceOriginal
+            ...(useReplacementStyle
               ? { quotedText, linkIndex, linkCount, ...(activeMentionHtmlForMessage ? { activeMentionHtml } : {}) }
               : {}),
           });
@@ -459,7 +467,6 @@ export function registerMessageHandler(bot: Bot): void {
     // above the bot message even when no reply_parameters were sent. Topic
     // messages must still honor MESSAGE_STYLE=replace instead of unexpectedly
     // reverting to compact mode.
-    const isThreadMessage = ctx.message.message_thread_id !== undefined;
     if (replaceOriginal && !originalDeleted && !isThreadMessage) {
       for (const quoted of pendingState.filter((entry) => entry.quotedText !== undefined)) {
         try {
