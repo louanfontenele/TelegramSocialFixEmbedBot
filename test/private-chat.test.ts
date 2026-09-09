@@ -492,20 +492,20 @@ test("A failed source deletion rolls the replacement back to an ordinary link re
   assert.ok(h.calls[2].payload.text.includes(fixedUrl));
 });
 
-test("A non-deletable thread root keeps the configured replacement style", async () => {
+test("A non-deletable topic message keeps the configured replacement style", async () => {
   config.messageStyle = "replace";
   mock.method(console, "error", () => {});
   const h = harness();
   h.rejectDelete();
   await h.message({
     ...incoming(ownerId, "supergroup"),
-    message_thread_id: 10,
+    message_thread_id: 321,
     is_topic_message: true,
     text: originalUrl,
   });
 
   assert.deepEqual(h.calls.map((call) => call.method), ["getChatMember", "sendMessage", "deleteMessage"]);
-  assert.equal(h.calls[1].payload.message_thread_id, 10);
+  assert.equal(h.calls[1].payload.message_thread_id, 321);
   assert.equal(h.calls[1].payload.reply_parameters, undefined);
   assert.match(h.calls[1].payload.text, /enviou um link/);
   assert.ok(!h.calls[1].payload.text.includes("X \/ Twitter · enviado por"));

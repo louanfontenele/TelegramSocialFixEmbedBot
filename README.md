@@ -238,10 +238,10 @@ a forum is still a supergroup as far as Telegram's API is concerned.
 Every response, replacement, and reply notification explicitly preserves the
 incoming `message_thread_id`, so the same configured message style is used in
 every forum topic instead of falling back to the general chat.
-If the link itself is the non-deletable root that anchors a thread, Telegram
-keeps that source visible and may render it above the bot message. The bot still
-uses the configured `replace` formatting rather than changing that response to
-the compact style.
+If Telegram refuses to delete a source inside a topic, it keeps that source
+visible and may render the thread anchor above the bot message. The bot still
+uses the configured `MESSAGE_STYLE` rather than changing the response to the
+compact style.
 
 To find a chat's id, send `/id` in it — the command only answers the
 `OWNER_USER_ID`, and works in any chat, including ones not yet allowlisted.
